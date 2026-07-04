@@ -1,0 +1,204 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "الخطة_التشغيلية_المحدثة_الأخيرة - Single Source of Truth Schema",
+  "description": "Reverse-engineered 1:1 schema from actual workbook inspection (openpyxl). 8 sheets = 8 strategic goals. 3 distinct column layouts (variant_A, variant_B, variant_C). No formulas exist anywhere in the file.",
+  "type": "object",
+  "properties": {
+    "workbook": {
+      "type": "object",
+      "properties": {
+        "sheet_count": { "const": 8 },
+        "header_rows": { "const": 3, "description": "Rows 1-3 are header rows on every sheet; data starts at row 4" },
+        "has_formulas": { "const": false },
+        "sheets": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/sheet" }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "sheet": {
+      "type": "object",
+      "required": ["sheet_name", "variant", "max_row", "max_col", "goal", "rows"],
+      "properties": {
+        "sheet_name": {
+          "type": "string",
+          "enum": ["الهدف الأول", "الهدف الثاني", "الهدف الثالث", "الهدف الرابع", "الهدف الخامس", "الهدف السادس", "الهدف السابع", "الهدف الثامن"]
+        },
+        "variant": {
+          "type": "string",
+          "enum": ["variant_A", "variant_B", "variant_C"],
+          "description": "variant_A = sheet 'الهدف الأول' only (split budget cols, no execution-cost col). variant_B = sheets 2,3,5,6,7,8 (single budget col + execution-cost col + baseline col). variant_C = sheet 'الهدف الرابع' only (like variant_B but WITHOUT baseline column)."
+        },
+        "max_row": { "type": "integer" },
+        "max_col": { "type": "integer", "enum": [66, 67] },
+        "goal": { "$ref": "#/definitions/strategic_goal" },
+        "rows": {
+          "type": "array",
+          "description": "Each element = one raw data row (row >= 4) exactly as stored, before any hierarchy forward-fill.",
+          "items": { "$ref": "#/definitions/raw_row" }
+        }
+      }
+    },
+
+    "strategic_goal": {
+      "type": "object",
+      "description": "Column A. Merged across ALL data rows in the sheet in every observed case (one goal per sheet).",
+      "properties": {
+        "الهدف الاستراتيجي": { "type": "string" }
+      }
+    },
+
+    "sub_goal": {
+      "type": "object",
+      "description": "Column B. Merged across a contiguous block of rows (one or more initiatives).",
+      "properties": {
+        "الهدف الفرعي": { "type": "string" }
+      }
+    },
+
+    "initiative": {
+      "type": "object",
+      "description": "Column C, merged across a contiguous row block, generally the same block as columns D-N (efficiency/effectiveness KPIs, department, budget, timeframe, quarters). This block may equal, or be narrower than, the sub_goal block.",
+      "properties": {
+        "المبادرة الاستراتيجية ": { "type": "string", "description": "Literal header includes a trailing space in the source file." },
+        "مؤشر الكفاءة للمبادرة\n(أداة لقياس مدخلات المبادرة)": { "type": "string" },
+        "المستهدف__efficiency": {
+          "description": "Literal header is 'المستهدف' (col E) - suffixed here only to disambiguate from the other two 'المستهدف' columns in this schema; the raw column header text is identical ('المستهدف') in the source file.",
+          "type": ["number", "string"],
+          "note": "MIXED TYPE observed. Numeric (0-1, displayed as 0% percent format) in most rows; TEXT in sheets 5, 6, 8 e.g. '+50', '5% – 10%', 'تحقيق التزام بالموازنة لا يقل عن 90%'. Do not coerce silently."
+        },
+        "مؤشر الفعالية للمبادرة\n(أداة لقياس نتائج المبادرة)": { "type": "string" },
+        "المستهدف__effectiveness": {
+          "description": "Literal header is 'المستهدف' (col G).",
+          "type": ["number", "string"],
+          "note": "Same mixed-type anomaly as efficiency target."
+        },
+        "department": {
+          "description": "Literal header is 'الإدارة / القسم' in sheets 1,2,3,4 and 'القطاع / الإدارة' in sheets 5,6,7,8 — different literal text, kept as-is per sheet.",
+          "type": "string",
+          "note": "Sheet 6 row 16 (H16) contains TWO department names separated by a newline in a single cell: 'مكتب الحوكمة والالتزام\\nمكتب المراجعة الداخلية'."
+        },
+        "budget": {
+          "oneOf": [
+            {
+              "description": "variant_B / variant_C: single column 'ميزانية المبادرة'",
+              "type": "number"
+            },
+            {
+              "description": "variant_A only (sheet 'الهدف الأول'): TWO columns (I, J) both headed 'ميزانية المبادرة'.",
+              "type": "object",
+              "properties": {
+                "ميزانية المبادرة__I": {
+                  "type": ["number", "string"],
+                  "note": "ANOMALY: sometimes numeric budget amount, sometimes the literal text 'مكة' (a location label) instead of a number, inconsistently within the same column."
+                },
+                "ميزانية المبادرة__J": {
+                  "type": ["number", "string", "null"],
+                  "note": "ANOMALY: sometimes numeric budget amount, sometimes the literal text 'المدينة', sometimes empty."
+                }
+              }
+            }
+          ]
+        },
+        "النطاق الزمني لتنفيذ المبادرة": {
+          "type": "string",
+          "note": "Free text combining a number and a unit, e.g. '26 أسبوع', '52 أسبوعًا'. Not a raw number."
+        },
+        "quarters": {
+          "type": "object",
+          "description": "4 columns under header 'المخطط الزمني لتنفيذ المبادرة' > 'الربع 1'..'الربع 4'.",
+          "properties": {
+            "الربع 1": { "$ref": "#/definitions/quarter_flag" },
+            "الربع 2": { "$ref": "#/definitions/quarter_flag" },
+            "الربع 3": { "$ref": "#/definitions/quarter_flag" },
+            "الربع 4": { "$ref": "#/definitions/quarter_flag" }
+          }
+        },
+        "projects": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/operational_project" }
+        }
+      }
+    },
+
+    "quarter_flag": {
+      "type": ["string", "null"],
+      "enum": ["✔︎", "✔", "✓", null],
+      "note": "ANOMALY: three visually-similar but distinct Unicode checkmark glyphs are used across sheets: '✔︎' (U+2714 U+FE0E) in sheet 1, '✔' (U+2714) in sheets 2-4, '✓' (U+2713) in sheets 5-8. Must be normalized to a single boolean before use."
+    },
+
+    "operational_project": {
+      "type": "object",
+      "description": "Column O (variant_B/C) or P (variant_A). Merge span can equal the initiative block, be a sub-block (project spans multiple KPI rows), or be unmerged (one row = one project).",
+      "properties": {
+        "المشاريع التشغيلية للمبادرة": { "type": "string" },
+        "تكلفة التنفيذ": {
+          "type": ["number", "null"],
+          "note": "COLUMN DOES NOT EXIST in variant_A (sheet 'الهدف الأول'). Present in variant_B and variant_C."
+        },
+        "kpis": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/project_kpi" }
+        }
+      }
+    },
+
+    "project_kpi": {
+      "type": "object",
+      "description": "Finest granularity: one un-merged data row = one measurement indicator for one project.",
+      "properties": {
+        "مؤشر القياس": { "type": "string" },
+        "المستهدف__kpi": {
+          "description": "Literal header is 'المستهدف' (col R, or col Q in variant_A).",
+          "type": ["number", "string"]
+        },
+        "خط الأساس\nالمنجز في 2025": {
+          "type": ["number", "null"],
+          "note": "COLUMN DOES NOT EXIST in variant_C (sheet 'الهدف الرابع')."
+        },
+        "monthly_tracking": {
+          "type": "array",
+          "minItems": 12,
+          "maxItems": 12,
+          "items": { "$ref": "#/definitions/monthly_entry" }
+        }
+      }
+    },
+
+    "monthly_entry": {
+      "type": "object",
+      "description": "One of 12 repeating blocks under super-header 'المستهدف الشهري', sub-headed by month name (يناير..ديسمبر), each with 4 literal sub-columns.",
+      "properties": {
+        "month": {
+          "type": "string",
+          "enum": ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليه", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"]
+        },
+        "المستهدف ": {
+          "type": ["number", "string", "null"],
+          "note": "ANOMALY in sheets 5 and 8: some cells contain non-numeric codes like '6M', '5M', '3M', '7M', '4M' with no explanation elsewhere in the workbook. Do not infer meaning."
+        },
+        "المنجز": { "type": ["number", "string", "null"] },
+        "التحديات": {
+          "type": ["string", "null"],
+          "note": "Mostly empty. Sheet 'الهدف الأول' contains non-breaking-space characters (U+00A0) as a placeholder instead of a true empty/NULL cell in this column."
+        },
+        "الشواهد": { "type": ["string", "null"] }
+      }
+    },
+
+    "raw_row": {
+      "type": "object",
+      "description": "Verbatim representation of a single physical spreadsheet row (row_number >= 4), with hierarchy columns (A,B,C) possibly null because the visual value only exists on the first row of its merge range in the source file. Consumers must forward-fill using merges_report.json, not assume every row repeats the value.",
+      "properties": {
+        "row_number": { "type": "integer" },
+        "cells": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Keyed by literal column letter (A, B, C, ... BO), value = raw cell value with native type as read by openpyxl (str/int/float/None). No renaming, no trimming, no coercion applied at this layer."
+        }
+      }
+    }
+  }
+}
