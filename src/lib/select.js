@@ -41,8 +41,8 @@ export function overallStats(db) {
     projDone, projDelayed, projNotStarted, projInProgress,
     projTotal: db.projects.length,
     kpiTotal: db.kpis.length,
-    missingEvidence: db.evidences.filter((e) => e.status === 'missing').length,
-    pendingApprovals: db.approvals.filter((a) => a.status === 'pending').length,
+    missingEvidence: (db.evidences || []).filter((e) => e.status === 'missing').length,
+    pendingApprovals: (db.approvals || []).filter((a) => a.status === 'pending').length,
     openChallenges: (db.challenges || []).filter((c) => c.status === 'open').length,
   };
 }

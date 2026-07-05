@@ -8,7 +8,6 @@ import { supabase } from '../lib/supabaseClient.js';
 import { can, DEFAULT_RULES, ROLES } from '../lib/status.js';
 import { PageHead } from '../components/ui/Bits.jsx';
 import { Field, StatusPill } from '../components/ui/Primitives.jsx';
-import { Confirm } from '../components/ui/Overlays.jsx';
 import ImportExcel from '../components/ImportExcel.jsx';
 
 export default function Settings() {
@@ -119,16 +118,8 @@ export default function Settings() {
           </div>
 
 
-          {/* Data reset */}
-          <div className="card pad" style={{ borderInlineStart: '3px solid var(--st-delayed)' }}>
-            <div className="card-head"><h3 className="row" style={{ gap: 8, color: 'var(--st-delayed)' }}><RotateCcw size={17} />إعادة تعيين البيانات</h3></div>
-            <p className="muted" style={{ fontSize: 13, marginBottom: 14 }}>يعيد جميع البيانات إلى حالتها الأصلية (المستوردة من الخطة)، ويحذف كل التحديثات الشهرية والشواهد والتحديات المُضافة داخل المنصة.</p>
-            <button className="btn btn-danger" onClick={() => setReset(true)}><RotateCcw size={15} /> إعادة التعيين</button>
-          </div>
         </>
       )}
-
-      {reset && <Confirm title="إعادة تعيين البيانات" message="سيتم حذف جميع تحديثات الإنجاز الشهري والملاحظات والشواهد. لا يمكن التراجع عن هذا الإجراء." confirmLabel="إعادة التعيين" danger onConfirm={handleResetData} onClose={() => setReset(false)} />}
     </div>
   );
 }

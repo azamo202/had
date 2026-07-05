@@ -13,10 +13,9 @@ export default function Sidebar() {
     <>
       <div className={`sidebar-backdrop ${mobileNav ? 'show' : ''}`} onClick={() => dispatch({ type: 'MOBILE_NAV', open: false })} />
       <aside className={`sidebar ${collapsed ? 'collapsed' : ''} ${mobileNav ? 'mobile-open' : ''}`}>
-        <div className="sidebar-brand">
-          <img src="/logo.png" alt="هدية" />
-          {!collapsed && <span className="bname">هدية</span>}
-          <button className="icon-btn" style={{ marginInlineStart: 'auto', width: 32, height: 32, background: 'transparent', border: 'none', color: '#9fcfc7' }}
+        <div className="sidebar-brand" style={collapsed ? { padding: '16px 8px', justifyContent: 'center' } : {}}>
+          {!collapsed && <img src="/logo.png" alt="هدية" />}
+          <button className="icon-btn" style={{ marginInlineStart: collapsed ? 0 : 'auto', width: 32, height: 32, background: 'transparent', border: 'none', color: '#9fcfc7', flexShrink: 0 }}
             onClick={() => dispatch({ type: 'COLLAPSE' })} aria-label="طي القائمة">
             {collapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
           </button>

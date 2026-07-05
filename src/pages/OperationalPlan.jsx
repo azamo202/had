@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, Rocket, FolderKanban, Building2, Target, Coins } from 'lucide-react';
+import { ChevronLeft, Rocket, FolderKanban, Building2, Target, Coins, Layers } from 'lucide-react';
 import { useApp } from '../store/AppContext.jsx';
 import { fmtCurrency } from '../lib/status.js';
 import { PageHead } from '../components/ui/Bits.jsx';
@@ -39,11 +39,17 @@ export default function OperationalPlan() {
                   color: isLast ? 'var(--brand-deep)' : 'var(--text-3)',
                   fontWeight: isLast ? 700 : 500,
                   fontSize: 15, cursor: isLast ? 'default' : 'pointer',
-                  transition: 'color 0.2s'
+                  transition: 'color 0.2s',
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start'
                 }}
                 className={!isLast ? "hover-brand" : ""}
               >
-                {label}
+                {p.level !== 'goals' && (
+                  <span style={{ fontSize: 11, opacity: 0.7, marginBottom: 2, fontWeight: 500 }}>
+                    {p.level === 'initiatives' ? 'المبادرات الاستراتيجية' : 'المشاريع التشغيلية'}
+                  </span>
+                )}
+                <span>{label}</span>
               </button>
               {!isLast && <ChevronLeft size={16} style={{ color: 'var(--text-4)' }} />}
             </React.Fragment>
@@ -52,6 +58,25 @@ export default function OperationalPlan() {
       </div>
 
       <div className="fade-in" key={current.level + (current.item?.id || 'root')}>
+        
+        {/* Section Title Indicator */}
+        <div className="row" style={{ marginBottom: 20, gap: 10, background: 'var(--bg)', padding: '12px 16px', borderRadius: 10, border: '1px solid var(--border)' }}>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--brand-tint)', display: 'grid', placeItems: 'center' }}>
+            <Layers size={20} style={{ color: 'var(--brand)' }} />
+          </div>
+          <div>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-deep)', margin: 0 }}>
+              {current.level === 'goals' && "الأهداف الاستراتيجية الرئيسية"}
+              {current.level === 'initiatives' && "المبادرات الاستراتيجية التابعة للهدف الاستراتيجي"}
+              {current.level === 'projects' && "المشاريع التشغيلية التابعة للمبادرة"}
+            </h3>
+            <p className="muted" style={{ fontSize: 13, marginTop: 4, margin: 0 }}>
+              {current.level === 'goals' && "تصفح الأهداف الاستراتيجية لاستعراض مبادراتها"}
+              {current.level === 'initiatives' && "انقر على أي مبادرة لاستعراض المشاريع التشغيلية الخاصة بها"}
+              {current.level === 'projects' && "قائمة المشاريع المخصصة لتحقيق مستهدفات هذه المبادرة"}
+            </p>
+          </div>
+        </div>
 
         {/* Level 1: Goals */}
         {current.level === 'goals' && (
@@ -117,6 +142,17 @@ export default function OperationalPlan() {
         {/* Level 3: Projects */}
         {current.level === 'projects' && (
           <div style={{ display: 'grid', gap: 16 }}>
+            {current.item.budget != null && current.item.budget > 0 && (
+              <div className="card pad" style={{ background: 'color-mix(in srgb, var(--brand) 10%, transparent)', border: '1px solid var(--brand)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px' }}>
+                <div className="row" style={{ gap: 10, color: 'var(--brand-deep)', fontWeight: 600, fontSize: 15 }}>
+                  <Coins size={20} /> إجمالي تكلفة المشاريع كاملة
+                </div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-deep)' }}>
+                  {fmtCurrency(current.item.budget)}
+                </div>
+              </div>
+            )}
+            
             {db.projects.filter(p => p.initiativeId === current.item.id).map((p) => {
               const pKpis = db.kpis.filter(k => k.projectId === p.id);
               const mainKpi = pKpis[0];
@@ -135,7 +171,7 @@ export default function OperationalPlan() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
                     {/* KPI Info */}
                     <div style={{ background: 'var(--bg-2)', padding: 12, borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <div className="row muted" style={{ gap: 6, fontSize: 12.5, fontWeight: 600 }}>
@@ -146,17 +182,12 @@ export default function OperationalPlan() {
                       </div>
                       <div style={{ background: 'rgba(0,0,0,0.04)', padding: '6px 10px', borderRadius: 6, display: 'inline-block', fontSize: 12.5, marginTop: 'auto' }}>
                         <span className="muted">المستهدف السنوي: </span> 
-                        <b>{mainKpi ? (mainKpi.targetRaw || mainKpi.targetNum || '—') : '—'}</b>
-                      </div>
-                    </div>
-
-                    {/* Budget Info */}
-                    <div style={{ background: 'var(--bg-2)', padding: 12, borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center' }}>
-                      <div className="row muted" style={{ gap: 6, fontSize: 12.5, fontWeight: 600 }}>
-                        <Coins size={14} /> تكلفة المشروع
-                      </div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--brand-deep)', marginTop: 4 }}>
-                        {p.cost != null ? fmtCurrency(p.cost) : 'غير محدد'}
+                        <b>
+                          {mainKpi ? (
+                            mainKpi.targetRaw || 
+                            (mainKpi.targetNum != null ? (mainKpi.targetPct ? `${mainKpi.targetNum * 100}%` : mainKpi.targetNum) : '—')
+                          ) : '—'}
+                        </b>
                       </div>
                     </div>
                   </div>

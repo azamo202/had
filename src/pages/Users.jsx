@@ -37,15 +37,15 @@ export default function UsersPage() {
 
         // Create new user via Edge Function
         const { data, error } = await supabase.functions.invoke('create-user', {
-          body: { 
-            email: u.email, 
-            password: password, 
-            name: u.name, 
-            roleName: legacyRole, 
-            dept: u.dept 
+          body: {
+            email: u.email,
+            password: password,
+            name: u.name,
+            roleName: legacyRole,
+            dept: u.dept
           }
         });
-        
+
         if (error) {
           let errorMsg = error.message;
           try {
@@ -53,10 +53,10 @@ export default function UsersPage() {
               const errBody = await error.context.json();
               errorMsg = errBody.error || errorMsg;
             }
-          } catch(e){}
+          } catch (e) { }
           throw new Error(errorMsg || 'فشل في إنشاء المستخدم');
         }
-        
+
         // Add to local state immediately
         const newU = { ...u, id: data.id, active: true };
         dispatch({ type: 'UPSERT', entity: 'users', item: newU });
@@ -64,10 +64,10 @@ export default function UsersPage() {
       } else {
         // Just update existing user in DB (only full_name, dept allowed here for simplicity, roles need admin key usually but let's assume they update public.users)
         let realRoleName = u.role;
-        if (u.role === 'strategy_office') realRoleName = 'مدير الاستراتيجية';
+        if (u.role === 'strategy_office') realRoleName = 'مدير المنصة';
         else if (u.role === 'ceo') realRoleName = 'المدير التنفيذي';
         else if (u.role === 'manager') realRoleName = 'مدير ادارة';
-        
+
         // First get role ID
         const { data: rolesData } = await supabase.from('roles').select('id').eq('name', realRoleName).single();
         if (rolesData) {
@@ -76,7 +76,7 @@ export default function UsersPage() {
             dept: u.dept || null,
             role_id: rolesData.id
           }).eq('id', u.id);
-          
+
           if (error) throw error;
         }
 
@@ -92,13 +92,13 @@ export default function UsersPage() {
     }
   };
 
-  const toggleActive = async (u) => { 
+  const toggleActive = async (u) => {
     try {
       const nextActive = !u.active;
       const { error } = await supabase.from('users').update({ active: nextActive }).eq('id', u.id);
       if (error) throw error;
-      dispatch({ type: 'UPSERT', entity: 'users', item: { ...u, active: nextActive } }); 
-      toast('تم تحديث حالة المستخدم'); 
+      dispatch({ type: 'UPSERT', entity: 'users', item: { ...u, active: nextActive } });
+      toast('تم تحديث حالة المستخدم');
     } catch (err) {
       toast('فشل تحديث الحالة', 'error');
     }
@@ -118,7 +118,7 @@ export default function UsersPage() {
             const errBody = await error.context.json();
             errorMsg = errBody.error || errorMsg;
           }
-        } catch(e){}
+        } catch (e) { }
         throw new Error(errorMsg || 'فشل الحذف');
       }
       dispatch({ type: 'DELETE', entity: 'users', id: u.id });
@@ -130,7 +130,7 @@ export default function UsersPage() {
     }
   };
 
-  const byRole = Object.fromEntries(Object.keys(ROLES).map((r) => [r, (db.users||[]).filter((u) => u.role === r).length]));
+  const byRole = Object.fromEntries(Object.keys(ROLES).map((r) => [r, (db.users || []).filter((u) => u.role === r).length]));
 
   return (
     <div className="page fade-in">
@@ -139,10 +139,10 @@ export default function UsersPage() {
       </PageHead>
 
       <div className="stat-grid" style={{ marginBottom: 16 }}>
-        <StatCard icon={Users} label="إجمالي المستخدمين" value={(db.users||[]).length} />
+        <StatCard icon={Users} label="إجمالي المستخدمين" value={(db.users || []).length} />
         <StatCard icon={Shield} label="مدراء وصلاحيات كاملة" value={byRole.ceo + byRole.strategy_manager} color="var(--brand-deep)" bg="color-mix(in srgb,var(--brand-deep) 12%,transparent)" />
         <StatCard icon={Building2} label="مدراء الإدارات" value={byRole.dept_manager} color="var(--gold)" bg="color-mix(in srgb,var(--gold) 18%,transparent)" />
-        <StatCard icon={Users} label="نشِط" value={(db.users||[]).filter((u) => u.active).length} color="var(--st-completed)" bg="color-mix(in srgb,var(--st-completed) 12%,transparent)" />
+        <StatCard icon={Users} label="نشِط" value={(db.users || []).filter((u) => u.active).length} color="var(--st-completed)" bg="color-mix(in srgb,var(--st-completed) 12%,transparent)" />
       </div>
 
       <div className="card pad" style={{ marginBottom: 14, display: 'grid', gap: 12 }}>

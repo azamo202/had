@@ -1,9 +1,26 @@
-import React, { createContext, useContext, useEffect, useMemo, useReducer, useCallback, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useReducer, useCallback, useRef, useState } from 'react';
 import { supabase } from '../lib/supabaseClient.js';
 import { DEFAULT_RULES, statusFromPct, clampPct, uid } from '../lib/status.js';
 
+// ─── Notification helper: inserts a row into Supabase notifications table ───
+export async function sendNotification({ userId, type, title, body = '', entityId = null, projectId = null }) {
+  if (!userId) return;
+  const { error } = await supabase.from('notifications').insert({
+    user_id: userId,
+    type,
+    title,
+    body,
+    entity_id: entityId,
+    project_id: projectId,
+    read: false,
+  });
+  if (error) console.error('[sendNotification]', error);
+}
+
 const AppCtx = createContext(null);
 export const useApp = () => useContext(AppCtx);
+
+const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليه', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
 const LS = 'hadiyah_state_v1';
 
@@ -47,14 +64,21 @@ function rollup(db, rules) {
     const prog = dp.length ? Math.round((dp.reduce((s, p) => s + p.progress, 0) / dp.length) * 10) / 10 : 0;
     return { ...d, progress: prog, projectCount: dp.length, status: statusFromPct(prog, dp.length > 0, rules) };
   });
-  return { ...db, kpis, projects, initiatives, goals, departments };
+  return {
+    ...db,
+    evidences: db.evidences || [],
+    challenges: db.challenges || [],
+    approvals: db.approvals || [],
+    notifications: db.notifications || [],
+    kpis, projects, initiatives, goals, departments
+  };
 }
 
 function initState() {
   const persisted = loadPersisted();
   const rules = persisted?.rules || DEFAULT_RULES;
   const initialDb = {
-    goals: [], objectives: [], initiatives: [], projects: [], kpis: [], departments: [], approvals: [], evidenceTypes: [], notifications: []
+    goals: [], objectives: [], initiatives: [], projects: [], kpis: [], departments: [], approvals: [], evidenceTypes: [], notifications: [], evidences: [], challenges: []
   };
   const db = rollup(persisted?.db || initialDb, rules);
   return {
@@ -127,7 +151,21 @@ function reducer(state, a) {
       return { ...state, db: { ...state.db, evidenceTypes: a.list } };
     }
     case 'NOTIF_READ': {
-      const notifications = state.db.notifications.map((n) => (a.id ? (n.id === a.id ? { ...n, read: true } : n) : { ...n, read: true }));
+      const notifications = (state.db.notifications || []).map((n) => (a.id ? (n.id === a.id ? { ...n, read: true } : n) : { ...n, read: true }));
+      // Persist to Supabase in background (fire-and-forget)
+      if (a.id) {
+        supabase.from('notifications').update({ read: true }).eq('id', a.id).then(({ error }) => { if (error) console.error('[NOTIF_READ]', error); });
+      } else {
+        supabase.from('notifications').update({ read: true }).eq('read', false).then(({ error }) => { if (error) console.error('[NOTIF_READ_ALL]', error); });
+      }
+      return { ...state, db: { ...state.db, notifications } };
+    }
+    case 'ADD_NOTIFICATION': {
+      const notifications = [...(state.db.notifications || []), a.notification];
+      return { ...state, db: { ...state.db, notifications } };
+    }
+    case 'REMOVE_NOTIFICATION': {
+      const notifications = (state.db.notifications || []).filter(n => n.id !== a.id);
       return { ...state, db: { ...state.db, notifications } };
     }
     case 'RESET': {
@@ -180,7 +218,7 @@ export function AppProvider({ children }) {
       // Map roles to new frontend role names for V1
       let frontendRole = 'manager';
       const roleName = userData?.roles?.name;
-      if (roleName === 'مدير الاستراتيجية') frontendRole = 'strategy_office';
+      if (roleName === 'مدير الاستراتيجية' || roleName === 'مدير المنصة') frontendRole = 'strategy_office';
       if (roleName === 'المدير التنفيذي') frontendRole = 'ceo';
       if (roleName === 'مدير ادارة' || roleName === 'رئيس قسم' || roleName === 'مدير مكتب') frontendRole = 'manager';
 
@@ -214,6 +252,78 @@ export function AppProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  // ─── Real Notifications from Supabase ───────────────────────────────────
+  const realtimeChannelRef = useRef(null);
+
+  const fetchNotifications = useCallback(async (userId) => {
+    if (!userId) return;
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(80);
+    if (error) { console.error('[fetchNotifications]', error); return; }
+    const mapped = (data || []).map(n => ({
+      id: n.id,
+      type: n.type,
+      title: n.title,
+      body: n.body || '',
+      entityId: n.entity_id,
+      projectId: n.project_id,
+      time: new Date(n.created_at).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' }),
+      read: n.read,
+    }));
+    dispatch({ type: 'SET_DB', db: { notifications: mapped } });
+  }, []);
+
+  useEffect(() => {
+    const userId = state.user?.id;
+    if (!userId) {
+      // Clean up any old channel when user logs out
+      if (realtimeChannelRef.current) {
+        supabase.removeChannel(realtimeChannelRef.current);
+        realtimeChannelRef.current = null;
+      }
+      return;
+    }
+
+    // Initial fetch
+    fetchNotifications(userId);
+
+    // Subscribe to Realtime inserts for this user's notifications
+    const channel = supabase
+      .channel(`notifications:user:${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+        (payload) => {
+          const n = payload.new;
+          const mapped = {
+            id: n.id,
+            type: n.type,
+            title: n.title,
+            body: n.body || '',
+            entityId: n.entity_id,
+            projectId: n.project_id,
+            time: new Date(n.created_at).toLocaleString('ar-SA', { dateStyle: 'short', timeStyle: 'short' }),
+            read: false,
+          };
+          dispatch({ type: 'ADD_NOTIFICATION', notification: mapped });
+          // Also show a toast
+          dispatch({ type: 'TOAST', toast: { message: n.title, kind: 'attention' } });
+        }
+      )
+      .subscribe();
+
+    realtimeChannelRef.current = channel;
+
+    return () => {
+      supabase.removeChannel(channel);
+      realtimeChannelRef.current = null;
+    };
+  }, [state.user?.id, fetchNotifications]);
+
   // Fetch Supabase Data on Mount
   useEffect(() => {
     async function fetchData() {
@@ -234,7 +344,8 @@ export function AppProvider({ children }) {
           { data: indicatorsData },
           { data: monthlyValuesData },
           { data: orgUnitsData },
-          { data: usersData }
+          { data: usersData },
+          { data: monthlyUpdatesData }
         ] = await Promise.all([
           supabase.from('strategic_goals').select('*'),
           supabase.from('strategic_objectives').select('*'),
@@ -243,7 +354,8 @@ export function AppProvider({ children }) {
           supabase.from('project_indicators').select('*'),
           supabase.from('indicator_monthly_values').select('*'),
           supabase.from('organization_units').select('*'),
-          supabase.from('users').select('*, roles(name), organization_units(name)')
+          supabase.from('users').select('*, roles(name), organization_units(name)'),
+          supabase.from('monthly_updates').select('*, users!monthly_updates_created_by_fkey(full_name)')
         ]);
 
         const mappedGoals = (goalsData || []).map(g => ({
@@ -269,11 +381,13 @@ export function AppProvider({ children }) {
             code: i.code,
             dept: i.organization_units?.name || '',
             timeframe: i.execution_week_label || i.execution_weeks,
-            budget: i.budget_total || i.budget_makkah || 0,
+            budget: i.budget_total || ((i.budget_makkah || 0) + (i.budget_madinah || 0)),
             effKpi: i.efficiency_indicator_name,
             effTgt: i.efficiency_target,
+            effTgtPct: i.efficiency_target_is_percentage,
             effectKpi: i.effectiveness_indicator_name,
             effectTgt: i.effectiveness_target,
+            effectTgtPct: i.effectiveness_target_is_percentage,
             week: i.execution_week_label,
             q1: i.q1, q2: i.q2, q3: i.q3, q4: i.q4
           };
@@ -300,7 +414,9 @@ export function AppProvider({ children }) {
             monthlyArr.push({
               month: m,
               target: mv ? (mv.target_value_raw || mv.target_value) : null,
+              targetPct: mv ? mv.target_is_percentage : false,
               actual: mv ? mv.achieved_value : null,
+              actualPct: mv ? mv.achieved_is_percentage : false,
               notes: mv ? mv.updates_notes : '',
               evidence: mv ? mv.evidence : ''
             });
@@ -312,6 +428,7 @@ export function AppProvider({ children }) {
             baselineNum: ind.baseline_value,
             targetNum: ind.annual_target,
             targetRaw: ind.target_raw,
+            targetPct: ind.kpi_target_is_percentage,
             monthly: monthlyArr
           };
         });
@@ -324,8 +441,8 @@ export function AppProvider({ children }) {
         const mappedUsers = (usersData || []).map(u => {
           let frontendRole = 'manager';
           const roleName = u.roles?.name;
-          if (roleName === 'مدير الاستراتيجية') frontendRole = 'strategy_office';
-          else if (roleName === 'المدير التنفيذي') frontendRole = 'ceo';
+          if (roleName === 'مدير الاستراتيجية' || roleName === 'مدير المنصة') frontendRole = 'strategy_office';
+          else if (roleName === 'الرئيس التنفيذي') frontendRole = 'ceo';
           else if (roleName === 'مدير ادارة' || roleName === 'رئيس قسم' || roleName === 'مدير مكتب') frontendRole = 'manager';
 
           return {
@@ -339,6 +456,21 @@ export function AppProvider({ children }) {
           };
         });
 
+        const mappedApprovals = (monthlyUpdatesData || []).map(upd => {
+          const p = mappedProjects.find(x => x.id === upd.project_id);
+          return {
+            id: upd.id,
+            projectId: upd.project_id,
+            goalId: p?.goalId,
+            dept: p?.dept,
+            month: MONTHS[upd.reporting_month - 1] || String(upd.reporting_month),
+            status: upd.status || 'pending',
+            submittedBy: upd.users?.full_name || 'غير محدد',
+            note: upd.notes,
+            comments: upd.rejection_reason ? [{ by: 'الاستراتيجية', text: upd.rejection_reason, decision: 'rejected' }] : []
+          };
+        });
+
         dispatch({
           type: 'SET_DB',
           db: {
@@ -348,7 +480,8 @@ export function AppProvider({ children }) {
             projects: mappedProjects,
             departments: mappedDepartments,
             users: mappedUsers,
-            kpis: mappedKpis
+            kpis: mappedKpis,
+            approvals: mappedApprovals
           }
         });
       } catch (err) {

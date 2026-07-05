@@ -14,6 +14,7 @@ import MonthlyFollowup from './pages/MonthlyFollowup.jsx';
 import Challenges from './pages/Challenges.jsx';
 import Evidence from './pages/Evidence.jsx';
 import Reports from './pages/Reports.jsx';
+import UpdateRequests from './pages/UpdateRequests.jsx';
 import AIAssistant from './pages/AIAssistant.jsx';
 import Notifications from './pages/Notifications.jsx';
 import UsersPage from './pages/Users.jsx';
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/challenges" element={<Challenges />} />
         <Route path="/evidence" element={<Evidence />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/approvals" element={<UpdateRequests />} />
         <Route path="/assistant" element={<AIAssistant />} />
         <Route path="/notifications" element={<Notifications />} />
         <Route path="/users" element={<UsersPage />} />

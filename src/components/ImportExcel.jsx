@@ -2,13 +2,14 @@ import React, { useState, useRef } from 'react';
 import * as xlsx from 'xlsx';
 import { supabase } from '../lib/supabaseClient.js';
 import { useApp } from '../store/AppContext.jsx';
-import { Upload, AlertCircle, CheckCircle, Loader2, Database } from 'lucide-react';
+import { Upload, AlertCircle, CheckCircle2, Loader2, Database, Trash2 } from 'lucide-react';
 import { PageHead } from './ui/Bits.jsx';
 
 // Normalization utilities
 const normalizeSpace = (str) => {
   if (str == null) return null;
-  const s = String(str).trim().replace(/\s+/g, ' ');
+  // Remove Arabic diacritics (Tashkeel) to ensure matching works even if the Excel has them
+  let s = String(str).replace(/[\u0617-\u061A\u064B-\u0652]/g, '').trim().replace(/\s+/g, ' ');
   return s === '' || s === 'None' || s === '-' ? null : s;
 };
 
@@ -21,7 +22,8 @@ const isCheck = (val) => {
 const parseNumeric = (val) => {
   const str = normalizeSpace(val);
   if (!str) return null;
-  let matches = str.match(/-?\d+(\.\d+)?([eE][+-]?\d+)?/);
+  const cleanStr = str.replace(/,/g, '');
+  let matches = cleanStr.match(/-?\d+(\.\d+)?([eE][+-]?\d+)?/);
   if (matches) {
     let num = parseFloat(matches[0]);
     if (str.includes('%')) num = num / 100;
@@ -36,6 +38,13 @@ const extractBudget = (val) => {
   // Goal 1 has sometimes two budgets Makkah/Madinah in one string or two columns.
   // We'll just sum or take the first numeric.
   return parseNumeric(val) || 0;
+};
+
+const isPct = (val, name = '') => {
+  const vStr = (val || '').toString();
+  if (vStr.includes('%')) return true;
+  if (name && name.includes('نسبة')) return true;
+  return false;
 };
 
 const ARABIC_NUM = { 'الأول': 1, 'الثاني': 2, 'الثالث': 3, 'الرابع': 4, 'الخامس': 5, 'السادس': 6, 'السابع': 7, 'الثامن': 8, 'التاسع': 9, 'العاشر': 10 };
@@ -55,6 +64,14 @@ export default function ImportExcel() {
       const data = await file.arrayBuffer();
       const workbook = xlsx.read(data, { cellDates: true });
 
+      const getCellValue = (cell) => {
+        if (!cell || cell.v == null) return null;
+        if (typeof cell.v === 'number' && cell.w && typeof cell.w === 'string' && cell.w.includes('%')) {
+          return cell.w;
+        }
+        return cell.v;
+      };
+
       const extractedData = {
         goals: new Map(),
         objectives: new Map(),
@@ -70,7 +87,7 @@ export default function ImportExcel() {
       for (const sheetName of workbook.SheetNames) {
         if (!sheetName.includes('الهدف')) continue;
         setProgress(`جاري تحليل ورقة: ${sheetName}...`);
-        
+
         let goalNumber = 0;
         for (const [k, v] of Object.entries(ARABIC_NUM)) {
           if (sheetName.includes(k)) goalNumber = v;
@@ -91,24 +108,27 @@ export default function ImportExcel() {
               for (let m of sheet['!merges']) {
                 if (R >= m.s.r && R <= m.e.r && C >= m.s.c && C <= m.e.c) {
                   inMerge = true;
-                  // Search for actual value inside merge block
-                  for (let r = m.s.r; r <= m.e.r; r++) {
-                    for (let c = m.s.c; c <= m.e.c; c++) {
-                      let cell = sheet[xlsx.utils.encode_cell({r, c})];
-                      if (cell && cell.v != null && String(cell.v).trim() !== '') {
-                        val = cell.v;
-                        break;
+                  if (C === m.s.c) {
+                    for (let r = m.s.r; r <= m.e.r; r++) {
+                      for (let c = m.s.c; c <= m.e.c; c++) {
+                        let cell = sheet[xlsx.utils.encode_cell({ r, c })];
+                        if (cell && cell.v != null && String(cell.v).trim() !== '') {
+                          val = getCellValue(cell);
+                          break;
+                        }
                       }
+                      if (val != null) break;
                     }
-                    if (val != null) break;
+                  } else {
+                    val = null; // prevent horizontal duplication
                   }
                   break;
                 }
               }
             }
             if (!inMerge) {
-              let cell = sheet[xlsx.utils.encode_cell({r: R, c: C})];
-              if (cell && cell.v != null) val = cell.v;
+              let cell = sheet[xlsx.utils.encode_cell({ r: R, c: C })];
+              val = getCellValue(cell);
             }
             row.push(val);
           }
@@ -119,10 +139,10 @@ export default function ImportExcel() {
 
         // 2. Discover Columns Dynamically
         let gIdx = -1, oIdx = -1, iIdx = -1, effKpiIdx = -1, effTgtIdx = -1;
-        let effectKpiIdx = -1, effectTgtIdx = -1, deptIdx = -1, budgetIdx = -1;
+        let effectKpiIdx = -1, effectTgtIdx = -1, deptIdx = -1, budgetIdx = -1, makkahIdx = -1, madinahIdx = -1;
         let weekIdx = -1, projIdx = -1, indNameIdx = -1, indTgtIdx = -1, indBaseIdx = -1;
         let q1Idx = -1, q2Idx = -1, q3Idx = -1, q4Idx = -1;
-        const monthIdxs = {}; 
+        const monthIdxs = {};
 
         // We scan first 3 rows to find column signatures
         for (let c = 0; c < grid[0].length; c++) {
@@ -137,7 +157,11 @@ export default function ImportExcel() {
           else if (h0.includes('مؤشر الكفاءة')) { effKpiIdx = c; effTgtIdx = c + 1; }
           else if (h0.includes('مؤشر الفعالية')) { effectKpiIdx = c; effectTgtIdx = c + 1; }
           else if (h0.includes('الإدارة / القسم') || h0.includes('القطاع / الإدارة')) deptIdx = c;
-          else if (h0.includes('ميزانية المبادرة')) budgetIdx = c;
+          else if (budgetIdx === -1 && (fullHead.includes('ميزانية المبادرة') || fullHead.includes('تكلفة') || fullHead.includes('ميزانية'))) {
+            makkahIdx = c;
+            madinahIdx = c + 1;
+            budgetIdx = c;
+          }
           else if (h0.includes('النطاق الزمني')) weekIdx = c;
           else if (h0.includes('المشاريع التشغيلية')) projIdx = c;
           else if (h0.includes('مؤشر القياس')) indNameIdx = c;
@@ -152,32 +176,44 @@ export default function ImportExcel() {
           else if (h1.includes('الربع 3')) q3Idx = c;
           else if (h1.includes('الربع 4')) q4Idx = c;
 
-          const mNames = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليه', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
-          for (let m = 0; m < mNames.length; m++) {
-            if (h1.includes(mNames[m])) {
-              const mNum = mNames[m] === 'يوليو' ? 7 : (m + 1);
+          const mNamesMap = {
+            'يناير': 1, 'فبراير': 2, 'مارس': 3, 'أبريل': 4, 'مايو': 5, 'يونيو': 6,
+            'يوليه': 7, 'يوليو': 7, 'أغسطس': 8, 'سبتمبر': 9, 'أكتوبر': 10, 'نوفمبر': 11, 'ديسمبر': 12
+          };
+          for (const [mName, mNum] of Object.entries(mNamesMap)) {
+            if (h1.includes(mName)) {
               if (!monthIdxs[mNum]) monthIdxs[mNum] = { tgt: c, actual: c + 1, chal: c + 2, ev: c + 3 };
             }
           }
         }
 
+        const isMergeDup = (R, C) => {
+          if (!sheet['!merges']) return false;
+          for (let m of sheet['!merges']) {
+            if (R >= m.s.r && R <= m.e.r && C >= m.s.c && C <= m.e.c) {
+              return R > m.s.r;
+            }
+          }
+          return false;
+        };
+
         // 3. Extract Rows
         let lastProjName = null;
         for (let r = 3; r < grid.length; r++) {
           const row = grid[r];
-          
+
           const gName = normalizeSpace(row[gIdx]);
           const oName = normalizeSpace(row[oIdx]);
           const iName = normalizeSpace(row[iIdx]);
           const rawPName = normalizeSpace(row[projIdx]);
-          
+
           if (rawPName) lastProjName = rawPName;
           const pName = lastProjName;
 
           // Spacer row detection: if all key fields are empty
           if (!gName && !oName && !iName && !pName) continue;
           if (!gName || !iName || !pName) continue; // invalid data row
-          
+
           totalRows++;
 
           // Goals
@@ -202,7 +238,9 @@ export default function ImportExcel() {
               code: `I${extractedData.initiatives.size + 1}`,
               objRef: objKey,
               deptRef: dName,
-              budget: extractBudget(row[budgetIdx]) + (budgetIdx >= 0 && row[budgetIdx+1] && typeof row[budgetIdx+1]==='number' ? row[budgetIdx+1] : 0), // handle Makkah/Madinah split roughly
+              budgetMakkah: 0,
+              budgetMadinah: 0,
+              budget: 0,
               effKpi: normalizeSpace(row[effKpiIdx]),
               effTgt: normalizeSpace(row[effTgtIdx]),
               effectKpi: normalizeSpace(row[effectKpiIdx]),
@@ -214,6 +252,14 @@ export default function ImportExcel() {
               q4: isCheck(row[q4Idx]),
             });
           }
+
+          // Accumulate initiative budget from any row belonging to it
+          const currentInit = extractedData.initiatives.get(initKey);
+          const rowMakkah = makkahIdx >= 0 && !isMergeDup(r, makkahIdx) ? extractBudget(row[makkahIdx]) : (budgetIdx >= 0 && !isMergeDup(r, budgetIdx) ? extractBudget(row[budgetIdx]) : 0);
+          const rowMadinah = madinahIdx >= 0 && !isMergeDup(r, madinahIdx) ? extractBudget(row[madinahIdx]) : 0;
+          currentInit.budgetMakkah += rowMakkah;
+          currentInit.budgetMadinah += rowMadinah;
+          currentInit.budget = currentInit.budgetMakkah + currentInit.budgetMadinah;
 
           // Projects
           const projKey = `${initKey}|${pName}`;
@@ -230,7 +276,7 @@ export default function ImportExcel() {
           if (indName) {
             const indKey = `${projKey}|${indName}`;
             const indTgtRaw = normalizeSpace(row[indTgtIdx]);
-            
+
             if (!extractedData.indicators.has(indKey)) {
               extractedData.indicators.set(indKey, {
                 name: indName,
@@ -249,7 +295,7 @@ export default function ImportExcel() {
                 const mActRaw = normalizeSpace(row[mCols.actual]);
                 const chal = normalizeSpace(row[mCols.chal]);
                 const ev = normalizeSpace(row[mCols.ev]);
-                
+
                 if (mTgtRaw || mActRaw || chal || ev) {
                   const mKey = `${indKey}|${m}`;
                   if (!extractedData.monthly.has(mKey)) {
@@ -276,7 +322,7 @@ export default function ImportExcel() {
       if (delErr) throw delErr;
 
       setProgress('جاري مزامنة الإدارات والأهداف...');
-      
+
       // Upsert Departments
       const { data: dbDepts, error: dErr } = await supabase.from('organization_units').upsert(
         Array.from(deptsSet).map(d => ({ name: d, type: 'إدارة' })),
@@ -304,10 +350,10 @@ export default function ImportExcel() {
         objPayload, { onConflict: 'name, strategic_goal_id' }
       ).select('id, name, strategic_goal_id');
       if (oErr) throw oErr;
-      
+
       const objMap = new Map(dbObjs.map(o => {
-         const gName = Array.from(goalMap.entries()).find(e => e[1] === o.strategic_goal_id)?.[0];
-         return [`${gName}|${o.name}`, o.id];
+        const gName = Array.from(goalMap.entries()).find(e => e[1] === o.strategic_goal_id)?.[0];
+        return [`${gName}|${o.name}`, o.id];
       }));
 
       setProgress('جاري مزامنة المبادرات...');
@@ -316,13 +362,18 @@ export default function ImportExcel() {
         code: v.code,
         strategic_objective_id: objMap.get(v.objRef),
         organization_unit_id: deptMap.get(v.deptRef),
-        efficiency_indicator_name: v.effKpi, efficiency_target: v.effTgt,
-        effectiveness_indicator_name: v.effectKpi, effectiveness_target: v.effectTgt,
-        budget_makkah: v.budget,
+        efficiency_indicator_name: v.effKpi, 
+        efficiency_target: v.effTgt,
+        efficiency_target_is_percentage: isPct(v.effTgt, v.effKpi),
+        effectiveness_indicator_name: v.effectKpi, 
+        effectiveness_target: v.effectTgt,
+        effectiveness_target_is_percentage: isPct(v.effectTgt, v.effectKpi),
+        budget_makkah: v.budgetMakkah,
+        budget_madinah: v.budgetMadinah,
         execution_week_label: v.week, execution_weeks: v.week ? parseInt(v.week.replace(/\D/g, '')) || 0 : 0,
         q1: v.q1, q2: v.q2, q3: v.q3, q4: v.q4
       }));
-      
+
       // Batch upsert initiatives in chunks of 100 to avoid request size limits
       const dbInits = [];
       for (let i = 0; i < initPayload.length; i += 100) {
@@ -333,8 +384,8 @@ export default function ImportExcel() {
         dbInits.push(...data);
       }
       const initMap = new Map(dbInits.map(i => {
-         const oKey = Array.from(objMap.entries()).find(e => e[1] === i.strategic_objective_id)?.[0];
-         return [`${oKey}|${i.name}`, i.id];
+        const oKey = Array.from(objMap.entries()).find(e => e[1] === i.strategic_objective_id)?.[0];
+        return [`${oKey}|${i.name}`, i.id];
       }));
 
       setProgress('جاري مزامنة المشاريع التشغيلية...');
@@ -343,7 +394,7 @@ export default function ImportExcel() {
         initiative_id: initMap.get(v.initRef),
         organization_unit_id: deptMap.get(v.deptRef)
       }));
-      
+
       const dbProjs = [];
       for (let i = 0; i < projPayload.length; i += 100) {
         const { data, error } = await supabase.from('operational_projects').upsert(
@@ -353,8 +404,8 @@ export default function ImportExcel() {
         dbProjs.push(...data);
       }
       const projMap = new Map(dbProjs.map(p => {
-         const iKey = Array.from(initMap.entries()).find(e => e[1] === p.initiative_id)?.[0];
-         return [`${iKey}|${p.project_name}`, p.id];
+        const iKey = Array.from(initMap.entries()).find(e => e[1] === p.initiative_id)?.[0];
+        return [`${iKey}|${p.project_name}`, p.id];
       }));
 
       setProgress('جاري مزامنة المؤشرات (قد يستغرق بعض الوقت)...');
@@ -364,9 +415,10 @@ export default function ImportExcel() {
         baseline_value: v.baseline,
         baseline_year: 2025,
         target_raw: v.target_raw,
-        annual_target: v.target_numeric
+        annual_target: v.target_numeric,
+        kpi_target_is_percentage: isPct(v.target_raw, v.name)
       }));
-      
+
       const dbInds = [];
       for (let i = 0; i < indPayload.length; i += 100) {
         const { data, error } = await supabase.from('project_indicators').upsert(
@@ -376,8 +428,8 @@ export default function ImportExcel() {
         dbInds.push(...data);
       }
       const indMap = new Map(dbInds.map(i => {
-         const pKey = Array.from(projMap.entries()).find(e => e[1] === i.project_id)?.[0];
-         return [`${pKey}|${i.indicator_name}`, i.id];
+        const pKey = Array.from(projMap.entries()).find(e => e[1] === i.project_id)?.[0];
+        return [`${pKey}|${i.indicator_name}`, i.id];
       }));
 
       setProgress('جاري مزامنة الإنجازات الشهرية...');
@@ -387,12 +439,14 @@ export default function ImportExcel() {
         year: 2026, // or current year
         target_value_raw: m.target_raw,
         target_value: m.target_numeric,
+        target_is_percentage: isPct(m.target_raw, extractedData.indicators.get(m.indRef)?.name),
         achieved_value_raw: m.achieved_raw,
         achieved_value: m.achieved_numeric,
+        achieved_is_percentage: isPct(m.achieved_raw, extractedData.indicators.get(m.indRef)?.name),
         updates_notes: m.notes,
         evidence: m.evidence
       }));
-      
+
       for (let i = 0; i < monthlyPayload.length; i += 500) {
         const { error } = await supabase.from('indicator_monthly_values').upsert(
           monthlyPayload.slice(i, i + 500), { onConflict: 'indicator_id, month' }
@@ -406,10 +460,10 @@ export default function ImportExcel() {
         projects: extractedData.projects.size,
         indicators: extractedData.indicators.size
       });
-      
+
       toast('تم استيراد الخطة الاستراتيجية وتحديثها بنجاح!', 'success');
       setProgress('تم الانتهاء بنجاح.');
-      
+
       // Force reload to refresh global state properly after successful upserts
       setTimeout(() => window.location.reload(), 3000);
 
@@ -433,41 +487,93 @@ export default function ImportExcel() {
     processExcel(file);
   };
 
+  const handleDeleteAllData = async () => {
+    if (!window.confirm('تنبيه خطير: سيتم مسح كافة البيانات من قاعدة البيانات (الأهداف، المبادرات، المشاريع، المؤشرات) نهائياً. هل أنت متأكد من رغبتك في الاستمرار؟')) {
+      return;
+    }
+    
+    // تأكيد إضافي للأمان
+    if (!window.confirm('هل أنت متأكد تماماً؟ هذا الإجراء لا يمكن التراجع عنه وسيحذف كافة البيانات الحالية.')) {
+      return;
+    }
+
+    setLoading(true);
+    setProgress('جاري مسح جميع البيانات...');
+    
+    try {
+      const { error: delErr } = await supabase.from('strategic_goals').delete().not('id', 'is', null);
+      if (delErr) throw delErr;
+      
+      toast('تم مسح جميع البيانات بنجاح', 'success');
+      setProgress('تم مسح البيانات بنجاح.');
+      
+      setTimeout(() => window.location.reload(), 2000);
+    } catch (err) {
+      console.error(err);
+      toast(err.message || 'حدث خطأ أثناء مسح البيانات', 'error');
+      setProgress('فشل مسح البيانات.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="card pad" style={{ display: 'grid', gap: 16 }}>
       <PageHead title="محرك الاستيراد الذكي (Excel)" sub="يرجى رفع ملف الخطة التشغيلية المحدثة للجمعية" />
-      
+
       <p className="muted" style={{ fontSize: 13, lineHeight: 1.6 }}>
-        هذا المحرك مصمم خصيصاً ليقرأ الخلايا المدمجة، ويتعرف على الأعمدة ديناميكياً (مهما اختلف ترتيبها)، 
-        ويستخرج مئات المؤشرات ومستهدفاتها الشهرية. سيتم <b>مسح كافة البيانات السابقة</b> وإعادة بناء الهيكل 
+        هذا المحرك مصمم خصيصاً ليقرأ الخلايا المدمجة، ويتعرف على الأعمدة ديناميكياً (مهما اختلف ترتيبها)،
+        ويستخرج مئات المؤشرات ومستهدفاتها الشهرية. سيتم <b>مسح كافة البيانات السابقة</b> وإعادة بناء الهيكل
         الاستراتيجي من هذا الملف للحصول على أحدث نسخة نظيفة ومحدثة.
       </p>
-      
+
       <div style={{ padding: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--st-attention) 10%, transparent)', color: 'var(--st-attention)', fontSize: 13, display: 'flex', gap: 10, alignItems: 'center' }}>
         <AlertCircle size={16} />
         <b>المحرك سيمسح البيانات:</b> سيتم استبدال كامل المشاريع والمبادرات ببيانات هذا الملف.
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8 }}>
-        <input 
-          type="file" 
-          accept=".xlsx, .xls" 
-          onChange={handleFileChange} 
-          disabled={loading} 
+        <input
+          type="file"
+          accept=".xlsx, .xls"
+          onChange={handleFileChange}
+          disabled={loading}
           ref={fileRef}
           style={{ display: 'none' }}
           id="excel-upload"
         />
         <label htmlFor="excel-upload" className="btn btn-primary" style={{ cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}>
-          {loading ? <><Loader2 size={16} className="spin"/> {progress}</> : 'اختر ملف الإكسل وارفع'}
+          {loading ? <><Loader2 size={16} className="spin" /> {progress}</> : 'اختر ملف الإكسل وارفع'}
         </label>
-        
+
+        <button 
+          onClick={handleDeleteAllData} 
+          disabled={loading}
+          style={{ 
+            cursor: loading ? 'not-allowed' : 'pointer', 
+            opacity: loading ? 0.7 : 1, 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 6, 
+            background: '#dc2626', 
+            color: 'white',
+            border: 'none',
+            padding: '8px 16px',
+            borderRadius: '6px',
+            fontSize: '14px',
+            fontWeight: 500
+          }}
+        >
+          <Trash2 size={16} />
+          مسح جميع البيانات
+        </button>
+
         {loading && <span className="muted" style={{ fontSize: 13 }}>{progress}</span>}
       </div>
 
       {stats && (
         <div style={{ marginTop: 12, padding: 14, background: 'var(--surface-1)', borderRadius: 8 }}>
-          <div className="row" style={{ gap: 6, color: 'var(--st-completed)', marginBottom: 12 }}><CheckCircle2 size={16}/> <b>تقرير الاستيراد (QA Report)</b></div>
+          <div className="row" style={{ gap: 6, color: 'var(--st-completed)', marginBottom: 12 }}><CheckCircle2 size={16} /> <b>تقرير الاستيراد (QA Report)</b></div>
           <div className="grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, textAlign: 'center' }}>
             <div><div className="mini-label">الأهداف</div><div style={{ fontSize: 16, fontWeight: 600 }}>{stats.goals}</div></div>
             <div><div className="mini-label">المبادرات</div><div style={{ fontSize: 16, fontWeight: 600 }}>{stats.inits}</div></div>

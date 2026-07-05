@@ -64,24 +64,12 @@ export default function Login() {
       <div style={{ background: 'linear-gradient(150deg,#063f39,#00A092 130%)', color: '#fff', padding: '54px 56px', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column' }} className="login-hero">
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(/pattern.png)', backgroundSize: 'auto 120px', backgroundRepeat: 'repeat', opacity: 0.06 }} />
         <div style={{ position: 'absolute', width: 460, height: 460, borderRadius: '50%', background: 'radial-gradient(circle,#84D3A4 0%,transparent 70%)', opacity: 0.18, top: -160, insetInlineStart: -120 }} />
-        <img src="/logo.png" alt="هدية" style={{ height: 40, filter: 'brightness(0) invert(1)', alignSelf: 'flex-start', position: 'relative' }} />
+        <img src="/logo.png" alt="هدية" style={{ height: 60, filter: 'brightness(0) invert(1)', alignSelf: 'flex-start', position: 'relative' }} />
         <div style={{ marginTop: 'auto', position: 'relative' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,.14)', padding: '5px 12px', borderRadius: 99, fontSize: 12, marginBottom: 20 }}>
-            <ShieldCheck size={14} /> منصة إدارية على مستوى المؤسسات
-          </div>
-          <h1 style={{ fontSize: 40, lineHeight: 1.2, color: '#fff', maxWidth: 460 }}>منصة إدارة ومتابعة الخطة الاستراتيجية والتشغيلية</h1>
-          <p style={{ fontSize: 15, opacity: 0.9, maxWidth: 440, marginTop: 14 }}>
-            إدارة ومتابعة واعتماد الخطة الاستراتيجية والتشغيلية لجمعية هدية — من الأهداف الكبرى وصولًا إلى المؤشرات والإنجاز الشهري، في نظام واحد متكامل.
-          </p>
-          <div style={{ display: 'flex', gap: 28, marginTop: 34, position: 'relative' }}>
-            <Stat n={db?.goals?.length || 0} l="أهداف استراتيجية" />
-            <Stat n={db?.initiatives?.length || 0} l="مبادرة" />
-            <Stat n={db?.projects?.length || 0} l="مشروع تشغيلي" />
-            <Stat n={db?.kpis?.length || 0} l="مؤشر أداء" />
-          </div>
+          <h1 style={{ fontSize: 40, lineHeight: 1.2, color: '#fff', maxWidth: 460 }}>منصة إدارة ومتابعة الخطة التشغيلية التنفيذية</h1>
         </div>
         <div style={{ marginTop: 30, fontSize: 12.5, opacity: 0.75, position: 'relative' }}>
-          الإصدار 1.0 – النظام متصل بقاعدة البيانات الآمنة
+          الإصدار 1.0
         </div>
       </div>
 

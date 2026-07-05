@@ -10,6 +10,9 @@ export const NAV = [
     { to: '/operational', label: 'الخطة التشغيلية', icon: ClipboardList },
     { to: '/followup', label: 'المتابعة الشهرية', icon: CalendarCheck },
   ]},
+  { section: 'الاعتمادات', items: [
+    { to: '/approvals', label: 'طلبات التحديثات', icon: ClipboardList, admin: true },
+  ]},
   { section: 'الإدارة', items: [
     { to: '/users', label: 'إدارة المستخدمين', icon: Users },
     { to: '/import', label: 'استيراد البيانات', icon: FileSpreadsheet },

@@ -5,11 +5,13 @@ import {
   TriangleAlert, FileCheck2, History, ArrowUpDown,
 } from 'lucide-react';
 import { useApp } from '../store/AppContext.jsx';
-import { st, fmtPct, fmt } from '../lib/status.js';
+import { st, fmtPct, fmtCurrency, fmt, fmtVal } from '../lib/status.js';
 import { makeIndex, useTable, scopeKpis } from '../lib/select.js';
 import { PageHead, SearchBox, Pager, Meta, TrendIcon } from '../components/ui/Bits.jsx';
 import { Progress, StatusPill, Chips, EmptyState, Ring, StatusPill as SP } from '../components/ui/Primitives.jsx';
 import { TrendArea, PALETTE } from '../components/charts/Charts.jsx';
+
+const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليه', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
 const STATUS_OPTS = [
   { value: 'completed', label: 'مكتمل' }, { value: 'on_track', label: 'على المسار' },
@@ -79,7 +81,7 @@ function Detail({ k, db, idx, nav }) {
   const challenges = db.challenges.filter((c) => c.kpiId === k.id);
   const evidence = db.evidences.filter((e) => e.kpiId === k.id);
   const history = k.monthly.filter((m) => m.actual != null);
-  const trend = history.map((m) => ({ name: m.month.slice(0, 3), value: m.actual }));
+  const trend = history.map((m) => ({ name: MONTHS[m.month - 1] || String(m.month), value: m.actual }));
 
   return (
     <div className="page fade-in">
@@ -98,7 +100,7 @@ function Detail({ k, db, idx, nav }) {
           <div className="grid g-4" style={{ gap: 18 }}>
             <Meta label="المستهدف (من الخطة)" value={k.target} />
             <Meta label="القيمة الأساسية" value={k.baseline || '—'} />
-            <Meta label="المُنجز الكلي" value={fmt(k.achievedNum)} />
+            <Meta label="المُنجز الكلي" value={fmtVal(k.achievedNum, k.targetPct)} />
             <Meta label="المالك" value={k.owner} />
           </div>
           <hr className="divider" />
@@ -131,7 +133,7 @@ function Detail({ k, db, idx, nav }) {
                 <thead><tr><th>الشهر</th><th>المُنجز</th><th>التحدي</th></tr></thead>
                 <tbody>
                   {history.map((m, n) => (
-                    <tr key={n}><td>{m.month}</td><td><b>{fmt(m.actual)}</b></td><td className="muted" style={{ fontSize: 12 }}>{m.challenge || '—'}</td></tr>
+                    <tr key={n}><td>{MONTHS[m.month - 1] || m.month}</td><td><b>{fmtVal(m.actual, k.targetPct)}</b></td><td className="muted" style={{ fontSize: 12 }}>{m.challenge || '—'}</td></tr>
                   ))}
                 </tbody>
               </table>

@@ -39,11 +39,17 @@ export default function StrategicPlan() {
                   color: isLast ? 'var(--brand-deep)' : 'var(--text-3)',
                   fontWeight: isLast ? 700 : 500,
                   fontSize: 15, cursor: isLast ? 'default' : 'pointer',
-                  transition: 'color 0.2s'
+                  transition: 'color 0.2s',
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start'
                 }}
                 className={!isLast ? "hover-brand" : ""}
               >
-                {label}
+                {p.level !== 'goals' && (
+                  <span style={{ fontSize: 11, opacity: 0.7, marginBottom: 2, fontWeight: 500 }}>
+                    {p.level === 'objectives' ? 'الأهداف الفرعية' : 'المبادرات الاستراتيجية'}
+                  </span>
+                )}
+                <span>{label}</span>
               </button>
               {!isLast && <ChevronLeft size={16} style={{ color: 'var(--text-4)' }} />}
             </React.Fragment>
@@ -53,6 +59,25 @@ export default function StrategicPlan() {
 
       <div className="fade-in" key={current.level + (current.item?.id || 'root')}>
         
+        {/* Section Title Indicator */}
+        <div className="row" style={{ marginBottom: 20, gap: 10, background: 'var(--bg)', padding: '12px 16px', borderRadius: 10, border: '1px solid var(--border)' }}>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--brand-tint)', display: 'grid', placeItems: 'center' }}>
+            <Layers size={20} style={{ color: 'var(--brand)' }} />
+          </div>
+          <div>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--brand-deep)', margin: 0 }}>
+              {current.level === 'goals' && "الأهداف الاستراتيجية الرئيسية"}
+              {current.level === 'objectives' && "الأهداف الفرعية التابعة للهدف المحدد"}
+              {current.level === 'initiatives' && "المبادرات الاستراتيجية التابعة للهدف الفرعي"}
+            </h3>
+            <p className="muted" style={{ fontSize: 13, marginTop: 4, margin: 0 }}>
+              {current.level === 'goals' && "تصفح الأهداف الرئيسية للمنظمة"}
+              {current.level === 'objectives' && "انقر على أي هدف فرعي لاستعراض المبادرات الخاصة به"}
+              {current.level === 'initiatives' && "تتضمن المشاريع المخصصة لتحقيق هذا الهدف الفرعي"}
+            </p>
+          </div>
+        </div>
+
         {/* Level 1: Goals */}
         {current.level === 'goals' && (
           <div style={{ display: 'grid', gap: 16 }}>

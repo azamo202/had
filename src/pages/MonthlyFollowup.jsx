@@ -3,9 +3,10 @@ import { useSearchParams } from 'react-router-dom';
 import {
   CalendarCheck, Save, Send, FolderKanban, Gauge, Lock, Building2,
   CheckCircle2, Info, TriangleAlert, FileCheck2, ChevronLeft, Target, Calendar,
-  Check, X, ExternalLink
+  Check, X, ExternalLink, XCircle
 } from 'lucide-react';
 import { useApp } from '../store/AppContext.jsx';
+import { sendNotification } from '../store/AppContext.jsx';
 import { st, fmtPct, can, APPROVAL_STATUS } from '../lib/status.js';
 import { scopeProjects, makeIndex } from '../lib/select.js';
 import { PageHead } from '../components/ui/Bits.jsx';
@@ -22,7 +23,7 @@ export default function MonthlyFollowup() {
   const idx = useMemo(() => makeIndex(db), [db]);
   
   const isManager = user?.role === 'manager';
-  const isStrategy = user?.role === 'strategy';
+  const isStrategy = user?.role === 'strategy_office';
   const isCEO = user?.role === 'ceo';
   const editable = can.edit(user?.role);
   
@@ -82,7 +83,16 @@ export default function MonthlyFollowup() {
 
   const approval = project ? db.approvals.find((a) => a.projectId === project.id && a.month === month) : null;
   const isLocked = approval?.status === 'pending' || approval?.status === 'approved';
-  const canEditInputs = isManager && !isLocked;
+  const canEditInputs = (isManager || isStrategy) && !isLocked;
+
+  let lockedReason = 'مغلق للتعديل';
+  if (!isManager && !isStrategy) {
+    lockedReason = 'مغلق (للقراءة فقط)';
+  } else if (approval?.status === 'pending') {
+    lockedReason = 'مغلق لطلب المراجعة';
+  } else if (approval?.status === 'approved') {
+    lockedReason = 'مغلق (التحديث معتمد)';
+  }
 
   // Sync form state when month or approval changes
   useEffect(() => {
@@ -112,11 +122,12 @@ export default function MonthlyFollowup() {
     if (app.status === 'pending') return 'var(--brand)';
     if (app.status === 'approved') return 'var(--st-completed)';
     if (app.status === 'rejected') return 'var(--st-delayed)';
+    if (app.status === 'needs_modification') return 'var(--st-attention)';
     return 'transparent';
   };
 
   // Form actions
-  const handleActualChange = (kpiId, raw, isPct) => {
+  const handleActualChange = async (kpiId, raw, isPct) => {
     if (!canEditInputs) return;
     const val = raw === '' ? null : Number(raw);
     
@@ -136,14 +147,18 @@ export default function MonthlyFollowup() {
     const monthNum = MONTHS.indexOf(month) + 1;
     dispatch({ type: 'KPI_MONTH', kpiId, month: monthNum, patch: { actual: numVal } });
     
-    try {
-      supabase.from('indicator_monthly_values').update({ achieved_value: numVal }).eq('indicator_id', kpiId).eq('month', monthNum);
-    } catch (err) {
-      console.error(err);
+    const { error } = await supabase.from('indicator_monthly_values')
+      .update({ achieved_value: numVal })
+      .eq('indicator_id', kpiId)
+      .eq('month', monthNum);
+      
+    if (error) {
+      console.error(error);
+      toast('حدث خطأ أثناء الاتصال بالخادم، لم يتم الحفظ', 'error');
     }
   };
 
-  const submit = (draft) => {
+  const submit = async (draft) => {
     if (!project || !canEditInputs) return;
     
     // Required Evidence for non-draft
@@ -152,33 +167,144 @@ export default function MonthlyFollowup() {
       return;
     }
 
-    dispatch({
-      type: 'SUBMIT_APPROVAL', projectId: project.id, goalId: project.goalId, dept: project.dept,
-      month, by: user.name, draft, note: notes || 'تحديث الإنجاز الشهري',
-    });
-    
-    // Dispatch evidence
-    if (evLink.trim()) {
+    try {
+      const monthInt = MONTHS.indexOf(month) + 1;
+      
+      // Ensure all current KPI values are flushed to Supabase before submitting
+      await Promise.all(kpis.map(async k => {
+        const mData = k.monthly.find(x => x.month === monthInt);
+        if (mData && mData.actual !== undefined) {
+          await supabase.from('indicator_monthly_values')
+            .update({ achieved_value: mData.actual })
+            .eq('indicator_id', k.id)
+            .eq('month', monthInt);
+        }
+      }));
+
+      const { data: upsertData, error } = await supabase.from('monthly_updates').upsert({
+        project_id: project.id,
+        reporting_month: monthInt,
+        reporting_year: new Date().getFullYear(),
+        notes: notes || 'تحديث الإنجاز الشهري',
+        status: draft ? 'draft' : 'pending',
+        created_by: user.id
+      }, { onConflict: 'project_id, reporting_year, reporting_month' }).select('id').single();
+
+      if (error) throw error;
+
       dispatch({
-        type: 'UPSERT', entity: 'evidences',
-        item: {
-          id: 'EV' + Date.now(), kpiId: kpis[0]?.id || null, projectId: project.id, goalId: project.goalId,
-          type: evType === 'أخرى' ? (evOther || 'أخرى') : evType, status: 'under_review',
-          month, title: evDesc.slice(0, 60), desc: evDesc, hasFile: !!evLink, link: evLink, owner: user.name,
-        },
+        type: 'SUBMIT_APPROVAL', projectId: project.id, goalId: project.goalId, dept: project.dept,
+        month, by: user.name, draft, note: notes || 'تحديث الإنجاز الشهري',
       });
+      
+      // Dispatch evidence
+      if (evLink.trim()) {
+        dispatch({
+          type: 'UPSERT', entity: 'evidences',
+          item: {
+            id: 'EV' + Date.now(), kpiId: kpis[0]?.id || null, projectId: project.id, goalId: project.goalId,
+            type: evType === 'أخرى' ? (evOther || 'أخرى') : evType, status: 'under_review',
+            month, title: evDesc.slice(0, 60), desc: evDesc, hasFile: !!evLink, link: evLink, owner: user.name,
+          },
+        });
+      }
+
+      // ─── Send real notifications when submitting for review ───
+      if (!draft) {
+        const updateId = upsertData?.id || null;
+        // Find all strategy_office users in the DB
+        const strategyUsers = db.users.filter(u => u.role === 'strategy_office');
+        await Promise.all(strategyUsers.map(su =>
+          sendNotification({
+            userId: su.id,
+            type: 'approval_pending',
+            title: `طلب مراجعة جديد: ${project.name}`,
+            body: `أرسل ${user.name} تحديث شهر ${month} لمشروع "${project.name}" بانتظار موافقتك.`,
+            entityId: updateId,
+            projectId: project.id,
+          })
+        ));
+      }
+      
+      toast(draft ? 'تم حفظ التحديث كمسودة' : 'تم إرسال التحديث لمكتب الاستراتيجية للمراجعة', draft ? 'attention' : 'success');
+    } catch (err) {
+      console.error(err);
+      toast('حدث خطأ أثناء الاتصال بالخادم', 'error');
     }
-    
-    toast(draft ? 'تم حفظ التحديث كمسودة' : 'تم إرسال التحديث لمكتب الاستراتيجية للمراجعة', draft ? 'attention' : 'success');
   };
 
-  const decide = (decision) => {
-    dispatch({
-      type: 'APPROVAL_DECIDE', id: approval.id, decision, comment: rejectReason, by: user.name
-    });
-    toast(decision === 'approved' ? 'تم الاعتماد بنجاح' : 'تم الرفض وتم إشعار الإدارة', decision === 'approved' ? 'success' : 'error');
+  const decide = async (decision) => {
+    try {
+      const monthInt = MONTHS.indexOf(month) + 1;
+      const decisionLabel = decision === 'approved' ? 'معتمد' : 'مرفوض';
+
+      // Persist decision to Supabase
+      const { error } = await supabase.from('monthly_updates')
+        .update({
+          status: decision,
+          ...(decision === 'rejected' && rejectReason ? { rejection_reason: rejectReason } : {})
+        })
+        .eq('project_id', project.id)
+        .eq('reporting_month', monthInt);
+
+      if (error) throw error;
+
+      dispatch({ type: 'APPROVAL_DECIDE', id: approval.id, decision, comment: rejectReason, by: user.name });
+
+      // ─── Send real notification to the original submitter ───
+      // Find the submitter in db.users by name (approval.submittedBy) or fetch from Supabase
+      const { data: updateRow } = await supabase
+        .from('monthly_updates')
+        .select('created_by')
+        .eq('project_id', project.id)
+        .eq('reporting_month', monthInt)
+        .single();
+
+      if (updateRow?.created_by) {
+        const notifType = decision === 'approved' ? 'update_approved' : 'update_rejected';
+        const titleMap = {
+          approved: `تم اعتماد تحديث شهر ${month}: ${project.name}`,
+          rejected: `تم رفض تحديث شهر ${month}: ${project.name}`,
+        };
+        const bodyMap = {
+          approved: `قام ${user.name} باعتماد تحديثك لشهر ${month} لمشروع "${project.name}".`,
+          rejected: `قام ${user.name} برفض تحديثك لشهر ${month}${rejectReason ? ': ' + rejectReason : ''}. يرجى معالجة الملاحظات وإعادة الإرسال.`,
+        };
+        await sendNotification({
+          userId: updateRow.created_by,
+          type: notifType,
+          title: titleMap[decision],
+          body: bodyMap[decision],
+          projectId: project.id,
+        });
+      }
+
+      toast(decision === 'approved' ? 'تم الاعتماد بنجاح' : 'تم الرفض وتم إشعار الإدارة', decision === 'approved' ? 'success' : 'error');
+    } catch (err) {
+      console.error(err);
+      toast('حدث خطأ أثناء حفظ القرار', 'error');
+    }
     setRejectModal(false);
     setRejectReason('');
+  };
+
+  const withdrawRequest = async () => {
+    if (!approval) return;
+    try {
+      const monthInt = MONTHS.indexOf(month) + 1;
+      const { error } = await supabase.from('monthly_updates')
+        .update({ status: 'draft' })
+        .eq('project_id', project.id)
+        .eq('reporting_month', monthInt);
+        
+      if (error) throw error;
+      
+      dispatch({ type: 'APPROVAL_DECIDE', id: approval.id, decision: 'draft', by: user.name });
+      toast('تم سحب الطلب بنجاح، يمكنك الآن التعديل وإعادة الإرسال', 'success');
+    } catch (err) {
+      console.error(err);
+      toast('حدث خطأ أثناء سحب الطلب', 'error');
+    }
   };
 
   const calcProgress = (actual, target) => {
@@ -334,8 +460,18 @@ export default function MonthlyFollowup() {
               <div className="row" style={{ background: 'color-mix(in srgb, var(--st-delayed) 10%, transparent)', border: '1px solid var(--st-delayed)', padding: '16px 20px', borderRadius: 12, color: 'var(--st-delayed)', gap: 12 }}>
                 <TriangleAlert size={24} />
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 15 }}>تحديث مرفوض (يحتاج تعديل)</div>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>تحديث مرفوض</div>
                   <div style={{ fontSize: 13, opacity: 0.9, marginTop: 4 }}>السبب: {approval.comments?.[approval.comments.length -1]?.text || 'غير محدد'}</div>
+                </div>
+              </div>
+            )}
+
+            {approval?.status === 'needs_modification' && (
+              <div className="row" style={{ background: 'color-mix(in srgb, var(--st-attention) 10%, transparent)', border: '1px solid var(--st-attention)', padding: '16px 20px', borderRadius: 12, color: 'var(--st-attention)', gap: 12 }}>
+                <TriangleAlert size={24} />
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>طلب تعديل</div>
+                  <div style={{ fontSize: 13, opacity: 0.9, marginTop: 4 }}>ملاحظات المراجعة: {approval.comments?.[approval.comments.length -1]?.text || 'غير محدد'}</div>
                 </div>
               </div>
             )}
@@ -426,7 +562,7 @@ export default function MonthlyFollowup() {
                   {kpis.map((k) => {
                     const monthNum = MONTHS.indexOf(month) + 1;
                     const m = k.monthly.find((x) => x.month === monthNum) || {};
-                    const isPct = String(k.targetRaw || '').includes('%');
+                    const isPct = k.targetPct || String(k.targetRaw || '').includes('%') || String(k.name || '').includes('نسبة');
                     const progressPct = calcProgress(m.actual, m.target);
                     
                     return (
@@ -446,14 +582,20 @@ export default function MonthlyFollowup() {
                             <div className="brand" style={{ fontSize: 13, marginBottom: 6, fontWeight: 600 }}>المنجز (قابل للتعديل)</div>
                             <div className="row" style={{ gap: 8 }}>
                               <input 
+                                key={`kpi-${k.id}-${m.actual}`}
                                 type="number" 
                                 className="inp" 
                                 disabled={!canEditInputs} 
                                 defaultValue={m.actual ?? ''} 
-                                placeholder="أدخل المنجز..."
+                                placeholder={canEditInputs ? "أدخل المنجز..." : "—"}
                                 min={0}
                                 max={isPct ? 100 : undefined}
-                                style={{ background: canEditInputs ? '#fff' : 'rgba(255,255,255,0.5)', fontSize: 16, fontWeight: 700, padding: '8px 12px', flex: 1 }}
+                                style={{ 
+                                  background: canEditInputs ? '#fff' : '#f1f5f9', 
+                                  color: canEditInputs ? 'var(--text)' : 'var(--text-3)',
+                                  cursor: canEditInputs ? 'text' : 'not-allowed',
+                                  fontSize: 16, fontWeight: 700, padding: '8px 12px', flex: 1 
+                                }}
                                 onBlur={(e) => handleActualChange(k.id, e.target.value, isPct)} 
                               />
                               {isPct && <span style={{fontWeight:700, fontSize:16, color:'var(--brand-deep)'}}>%</span>}
@@ -483,25 +625,37 @@ export default function MonthlyFollowup() {
               </div>
               
               <div style={{ display: 'grid', gap: 20 }}>
-                <Field label="التحديات (اختياري)">
+                <Field label={`التحديات (اختياري) — ${notes.length}/150`}>
                   <textarea 
                     className="txta" 
                     disabled={!canEditInputs} 
                     value={notes} 
                     onChange={(e) => setNotes(e.target.value)} 
-                    placeholder="اكتب جميع التحديات التي واجهتك أثناء التنفيذ هذا الشهر..." 
-                    style={{ minHeight: 100, background: canEditInputs ? '#fff' : 'var(--bg-2)' }}
+                    placeholder={canEditInputs ? "اكتب جميع التحديات التي واجهتك أثناء التنفيذ هذا الشهر..." : lockedReason} 
+                    style={{ 
+                      minHeight: 100, 
+                      background: canEditInputs ? '#fff' : '#f1f5f9',
+                      cursor: canEditInputs ? 'text' : 'not-allowed',
+                      color: canEditInputs ? 'inherit' : 'var(--text-3)'
+                    }}
+                    maxLength={150}
                   />
                 </Field>
                 
-                <Field label="الدعم المطلوب (اختياري)">
+                <Field label={`الدعم المطلوب (اختياري) — ${support.length}/150`}>
                   <textarea 
                     className="txta" 
                     disabled={!canEditInputs} 
                     value={support} 
                     onChange={(e) => setSupport(e.target.value)} 
-                    placeholder="اكتب أي دعم تحتاجه لإنجاح المشروع (اعتماد مالي، قرار، دعم إدارة أخرى، توفير كوادر...)" 
-                    style={{ minHeight: 100, background: canEditInputs ? '#fff' : 'var(--bg-2)' }}
+                    placeholder={canEditInputs ? "اكتب أي دعم تحتاجه لإنجاح المشروع..." : lockedReason} 
+                    style={{ 
+                      minHeight: 100, 
+                      background: canEditInputs ? '#fff' : '#f1f5f9',
+                      cursor: canEditInputs ? 'text' : 'not-allowed',
+                      color: canEditInputs ? 'inherit' : 'var(--text-3)'
+                    }}
+                    maxLength={150}
                   />
                 </Field>
               </div>
@@ -515,20 +669,20 @@ export default function MonthlyFollowup() {
               
               <div className="grid g-2" style={{ gap: 16 }}>
                 <Field label="نوع الشاهد">
-                  <select className="sel" disabled={!canEditInputs} value={evType} onChange={(e) => setEvType(e.target.value)} style={{ background: canEditInputs ? '#fff' : 'var(--bg-2)' }}>
+                  <select className="sel" disabled={!canEditInputs} value={evType} onChange={(e) => setEvType(e.target.value)} style={{ background: canEditInputs ? '#fff' : '#f1f5f9', cursor: canEditInputs ? 'pointer' : 'not-allowed', color: canEditInputs ? 'inherit' : 'var(--text-3)' }}>
                     {EV_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </Field>
                 
                 {evType === 'أخرى' && (
                   <Field label="اكتب نوع الشاهد">
-                    <input className="inp" disabled={!canEditInputs} value={evOther} onChange={(e) => setEvOther(e.target.value)} placeholder="مثال: فاتورة ضريبية" style={{ background: canEditInputs ? '#fff' : 'var(--bg-2)' }}/>
+                    <input className="inp" disabled={!canEditInputs} value={evOther} onChange={(e) => setEvOther(e.target.value)} placeholder={canEditInputs ? "مثال: فاتورة ضريبية" : ""} style={{ background: canEditInputs ? '#fff' : '#f1f5f9', cursor: canEditInputs ? 'text' : 'not-allowed', color: canEditInputs ? 'inherit' : 'var(--text-3)' }}/>
                   </Field>
                 )}
                 
                 <Field label="رابط الملف المرجعي (SharePoint, OneDrive أو غيره)" hint="رابط الشاهد إلزامي عند إرسال التحديث للمراجعة">
                   <div className="row" style={{ gap: 8 }}>
-                    <input className="inp" disabled={!canEditInputs} type="url" value={evLink} onChange={(e) => setEvLink(e.target.value)} placeholder="https://..." style={{ flex: 1, background: canEditInputs ? '#fff' : 'var(--bg-2)' }} />
+                    <input className="inp" disabled={!canEditInputs} type="url" value={evLink} onChange={(e) => setEvLink(e.target.value)} placeholder={canEditInputs ? "https://..." : lockedReason} style={{ flex: 1, background: canEditInputs ? '#fff' : '#f1f5f9', cursor: canEditInputs ? 'text' : 'not-allowed', color: canEditInputs ? 'inherit' : 'var(--text-3)' }} />
                     {evLink && (
                       <a href={evLink} target="_blank" rel="noreferrer" className="btn btn-ghost" style={{ padding: '0 12px' }} title="فتح الشاهد">
                         <ExternalLink size={18} style={{ color: 'var(--brand)' }} /> فتح الملف
@@ -538,7 +692,7 @@ export default function MonthlyFollowup() {
                 </Field>
                 
                 <Field label="وصف الشاهد">
-                  <input className="inp" disabled={!canEditInputs} value={evDesc} onChange={(e) => setEvDesc(e.target.value)} placeholder="وصف مختصر لمحتوى الملف" style={{ background: canEditInputs ? '#fff' : 'var(--bg-2)' }}/>
+                  <input className="inp" disabled={!canEditInputs} value={evDesc} onChange={(e) => setEvDesc(e.target.value)} placeholder={canEditInputs ? "وصف مختصر لمحتوى الملف" : lockedReason} style={{ background: canEditInputs ? '#fff' : '#f1f5f9', cursor: canEditInputs ? 'text' : 'not-allowed', color: canEditInputs ? 'inherit' : 'var(--text-3)' }}/>
                 </Field>
               </div>
             </div>
@@ -554,11 +708,19 @@ export default function MonthlyFollowup() {
               </div>
             )}
 
-            {/* Re-submit action for rejected */}
-            {isManager && approval?.status === 'rejected' && (
-              <div className="card pad row between" style={{ flexWrap: 'wrap', gap: 12, position: 'sticky', bottom: 12, background: 'color-mix(in srgb, var(--st-delayed) 5%, rgba(255,255,255,0.95))', backdropFilter: 'blur(8px)', zIndex: 10, border: '1px solid var(--st-delayed)' }}>
-                <span className="row" style={{ gap: 7, fontSize: 13, fontWeight: 600, color: 'var(--st-delayed)' }}><TriangleAlert size={16} />يرجى معالجة سبب الرفض ثم إعادة الإرسال.</span>
-                <button className="btn btn-primary" onClick={() => submit(false)} style={{ padding: '12px 24px', fontSize: 15, background: 'var(--st-delayed)' }}><Send size={18} /> إعادة إرسال للمراجعة</button>
+            {/* Re-submit action for rejected or needs_modification */}
+            {(isManager || isStrategy) && (approval?.status === 'rejected' || approval?.status === 'needs_modification') && (
+              <div className="card pad row between" style={{ flexWrap: 'wrap', gap: 12, position: 'sticky', bottom: 12, background: 'color-mix(in srgb, var(--brand) 5%, rgba(255,255,255,0.95))', backdropFilter: 'blur(8px)', zIndex: 10, border: '1px solid var(--brand)' }}>
+                <span className="row" style={{ gap: 7, fontSize: 13, fontWeight: 600, color: 'var(--brand-deep)' }}><TriangleAlert size={16} />يرجى معالجة الملاحظات ثم إعادة الإرسال للمراجعة.</span>
+                <button className="btn btn-primary" onClick={() => submit(false)} style={{ padding: '12px 24px', fontSize: 15 }}><Send size={18} /> إعادة إرسال للمراجعة</button>
+              </div>
+            )}
+
+            {/* Withdraw action for pending */}
+            {isManager && approval?.status === 'pending' && (
+              <div className="card pad row between" style={{ flexWrap: 'wrap', gap: 12, position: 'sticky', bottom: 12, background: 'color-mix(in srgb, var(--st-attention) 5%, rgba(255,255,255,0.95))', backdropFilter: 'blur(8px)', zIndex: 10, border: '1px solid var(--st-attention)' }}>
+                <span className="row" style={{ gap: 7, fontSize: 13, fontWeight: 600, color: 'var(--st-attention)' }}><Info size={16} />الطلب حالياً قيد المراجعة. إذا أرسلته بالخطأ أو أردت التعديل، يمكنك سحب الطلب.</span>
+                <button className="btn btn-ghost" onClick={withdrawRequest} style={{ padding: '12px 24px', fontSize: 15, color: 'var(--st-delayed)', border: '1px solid var(--border)' }}><XCircle size={18} /> سحب الطلب للتعديل</button>
               </div>
             )}
 

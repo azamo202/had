@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabaseClient.js';
 import {
   FileBarChart, Printer, FileSpreadsheet, FileText, Download, CheckCircle2, XCircle,
   Clock, Target, Building2, Rocket, FolderKanban, Gauge, TriangleAlert, FileCheck2,
 } from 'lucide-react';
 import { useApp } from '../store/AppContext.jsx';
-import { st, fmtPct, fmt, fmtCurrency, can, APPROVAL_STATUS } from '../lib/status.js';
+import { st, fmtPct, fmt, fmtCurrency, can, APPROVAL_STATUS, fmtVal } from '../lib/status.js';
 import { overallStats, makeIndex } from '../lib/select.js';
 import { PageHead } from '../components/ui/Bits.jsx';
 import { StatCard, EmptyState, Avatar } from '../components/ui/Primitives.jsx';
@@ -37,9 +38,6 @@ export default function Reports() {
         <button className="btn btn-ghost btn-sm" onClick={() => exportCsv(db, active)}><FileSpreadsheet size={15} /> تصدير Excel</button>
         <button className="btn btn-primary btn-sm" onClick={() => window.print()}><Download size={15} /> تصدير PDF</button>
       </PageHead>
-
-      {isApprover && <ApprovalsPanel db={db} nav={nav} />}
-
       <div className="grid" style={{ gridTemplateColumns: '300px 1fr', alignItems: 'start', gap: 18 }}>
         <div style={{ display: 'grid', gap: 8 }}>
           {REPORTS.map((r) => (
@@ -57,44 +55,6 @@ export default function Reports() {
           <ReportView which={active} db={db} s={s} />
         </div>
       </div>
-    </div>
-  );
-}
-
-function ApprovalsPanel({ db, nav }) {
-  const { dispatch, toast, user } = useApp();
-  const [reject, setReject] = useState(null);
-  const idx = useMemo(() => makeIndex(db), [db]);
-  const pending = db.approvals.filter((a) => a.status === 'pending');
-  if (pending.length === 0) return null;
-
-  const decide = (ap, decision, comment) => {
-    dispatch({ type: 'APPROVAL_DECIDE', id: ap.id, decision, by: user.name, comment });
-    toast(decision === 'approved' ? 'تم اعتماد التحديث' : 'تم إرجاع التحديث للتعديل', decision === 'approved' ? 'success' : 'attention');
-    setReject(null);
-  };
-
-  return (
-    <div className="card pad" style={{ marginBottom: 18, borderInlineStart: '3px solid var(--st-attention)' }}>
-      <div className="card-head"><h3 className="row" style={{ gap: 8 }}><Clock size={17} style={{ color: 'var(--st-attention)' }} />طلبات اعتماد بانتظار المراجعة</h3><span className="tag">{pending.length}</span></div>
-      <div style={{ display: 'grid', gap: 8 }}>
-        {pending.map((ap) => (
-          <div key={ap.id} className="row between" style={{ padding: '11px 13px', borderRadius: 10, background: 'var(--surface-2)', flexWrap: 'wrap', gap: 10 }}>
-            <div className="row" style={{ gap: 11, minWidth: 0 }}>
-              <Avatar name={ap.submittedBy} sm />
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, cursor: 'pointer' }} className="link" onClick={() => nav('/projects?id=' + ap.projectId)}>{idx.p[ap.projectId]?.name || ap.projectId}</div>
-                <div className="muted" style={{ fontSize: 11.5 }}>{ap.submittedBy} · {ap.dept} · {ap.month}</div>
-              </div>
-            </div>
-            <div className="row" style={{ gap: 8 }}>
-              <button className="btn btn-soft btn-sm" onClick={() => decide(ap, 'approved')}><CheckCircle2 size={14} /> اعتماد</button>
-              <button className="btn btn-danger btn-sm" onClick={() => setReject(ap)}><XCircle size={14} /> إرجاع</button>
-            </div>
-          </div>
-        ))}
-      </div>
-      {reject && <Confirm title="إرجاع التحديث" message="سيُعاد التحديث لمقدّمه لإجراء التعديلات اللازمة." confirmLabel="إرجاع للتعديل" danger onConfirm={() => decide(reject, 'rejected', 'يرجى مراجعة القيم المدخلة وإرفاق الشواهد الداعمة.')} onClose={() => setReject(null)} />}
     </div>
   );
 }
@@ -154,7 +114,7 @@ function ReportView({ which, db, s }) {
 
   if (which === 'kpi') return (<div>{head('تقرير مؤشرات الأداء', 'تحقق المؤشرات مقابل المستهدف')}
     <SimpleTable cols={['المؤشر', 'النوع', 'المستهدف', 'المُنجز', 'التحقق', 'الحالة']}
-      rows={db.kpis.map((k) => [k.name, k.type, k.target, fmt(k.achievedNum), fmtPct(k.achievement), st(k.status).label])} /></div>);
+      rows={db.kpis.map((k) => [k.name, k.type, k.target, fmtVal(k.achievedNum, k.targetPct), fmtPct(k.achievement), st(k.status).label])} /></div>);
 
   if (which === 'evidence') return (<div>{head('تقرير الشواهد', 'حالة الشواهد ومسار اعتمادها')}
     <SimpleTable cols={['الشاهد', 'النوع', 'المشروع', 'المالك', 'الحالة']}

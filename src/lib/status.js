@@ -23,7 +23,7 @@ export const st = (k) => STATUS[k] || STATUS.not_started;
 
 export const ROLES = {
   ceo: { label: 'الرئيس التنفيذي', short: 'الرئيس التنفيذي' },
-  strategy_office: { label: 'مكتب الاستراتيجية والتميز المؤسسي', short: 'الاستراتيجية' },
+  strategy_office: { label: 'مدير المنصة', short: 'مدير المنصة' },
   manager: { label: 'ممثل إدارة / مسؤول تحديث (جهة تنفيذية)', short: 'ممثل إدارة' },
 };
 
@@ -40,6 +40,11 @@ export function fmt(n) {
   if (n === null || n === undefined || n === '') return '—';
   if (typeof n !== 'number') return String(n);
   return n.toLocaleString('en-US', { maximumFractionDigits: 1 });
+}
+export function fmtVal(n, isPct) {
+  if (n === null || n === undefined || n === '') return '—';
+  const v = typeof n !== 'number' ? String(n) : n.toLocaleString('en-US', { maximumFractionDigits: 1 });
+  return isPct ? v + '%' : v;
 }
 export function fmtCurrency(n) {
   if (!n && n !== 0) return '—';
@@ -69,6 +74,7 @@ export const APPROVAL_STATUS = {
   pending:  { label: 'بانتظار المراجعة', cls: 'st-attention' },
   approved: { label: 'معتمد',            cls: 'st-completed' },
   rejected: { label: 'مرفوض',            cls: 'st-delayed' },
+  needs_modification: { label: 'طلب تعديل', cls: 'st-attention' },
   draft:    { label: 'مسودة',            cls: 'st-not_started' },
 };
 export const CHALLENGE_SEV = {

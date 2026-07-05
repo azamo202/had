@@ -8,7 +8,7 @@ import { useApp } from '../store/AppContext.jsx';
 import { st, fmtPct, fmtCurrency, fmt } from '../lib/status.js';
 import { makeIndex, useTable, scopeProjects } from '../lib/select.js';
 import { PageHead, SearchBox, Pager, Meta, TrendIcon } from '../components/ui/Bits.jsx';
-import { Progress, StatusPill, Avatar, Chips, EmptyState, StatCard } from '../components/ui/Primitives.jsx';
+import { Progress, StatusPill, Avatar, Chips, EmptyState, StatCard, Ring } from '../components/ui/Primitives.jsx';
 import { MiniSpark, PALETTE } from '../components/charts/Charts.jsx';
 
 const STATUS_OPTS = [
@@ -53,7 +53,7 @@ function List({ db, user, nav }) {
                   <td style={{ maxWidth: 300 }}><span style={{ fontWeight: 500, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span></td>
                   <td className="muted" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{p.dept}</td>
                   <td><span className="row" style={{ gap: 7 }}><Avatar name={p.owner} sm /><span style={{ fontSize: 12.5, whiteSpace: 'nowrap' }}>{p.owner}</span></span></td>
-                  <td style={{ minWidth: 130 }}><div className="row" style={{ gap: 8 }}><b style={{ fontSize: 12.5, color: st(p.status).color, width: 42 }}>{fmtPct(p.progress)}</b><div style={{ flex: 1 }}><Progress value={p.progress} color={st(p.status).color} thin /></div></div></td>
+                  <td style={{ minWidth: 100 }}><Ring value={p.progress} size={44} color={st(p.status).color} label={<b style={{fontSize: 12, color: st(p.status).color}}>{fmtPct(p.progress)}</b>} /></td>
                   <td><StatusPill status={p.status} sm /></td>
                   <td><span className="tag">{p.kpiCount}</span></td>
                 </tr>
@@ -92,7 +92,9 @@ function Detail({ p, db, idx, nav }) {
             <StatusPill status={p.status} />
           </div>
         </div>
-        <Progress value={p.progress} color={st(p.status).color} />
+        <div style={{ marginTop: 16 }}>
+          <Ring value={p.progress} size={80} color={st(p.status).color} />
+        </div>
         <div className="grid g-4" style={{ marginTop: 20, gap: 18 }}>
           <Meta label="المبادرة" value={init?.name} />
           <Meta label="الإدارة" value={p.dept} />
@@ -127,7 +129,11 @@ function Detail({ p, db, idx, nav }) {
                   <div className="row between">
                     <div>
                       <div className="mini-label">المستهدف</div>
-                      <div style={{ fontSize: 13, fontWeight: 500 }}>{k.targetRaw != null ? k.targetRaw : (k.targetNum != null ? k.targetNum : '—')}</div>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>
+                        {k.targetRaw != null ? k.targetRaw : (
+                          k.targetNum != null ? (k.targetPct ? `${k.targetNum * 100}%` : k.targetNum) : '—'
+                        )}
+                      </div>
                     </div>
                     <div style={{ textAlign: 'center' }}>
                       <div className="mini-label">التحقق</div>
