@@ -42,8 +42,8 @@ serve(async (req) => {
       .eq('id', authUser.id)
       .single();
       
-    if (requestorPublic?.roles?.name !== 'مدير الاستراتيجية') {
-      throw new Error('Forbidden: Only Strategy Manager can delete users.')
+    if (requestorPublic?.roles?.name !== 'مدير المنصة' && requestorPublic?.roles?.name !== 'مدير الاستراتيجية') {
+      throw new Error('Forbidden: Only Strategy/Platform Manager can delete users.')
     }
 
     const { userId } = await req.json()

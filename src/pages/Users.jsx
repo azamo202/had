@@ -71,9 +71,12 @@ export default function UsersPage() {
         // First get role ID
         const { data: rolesData } = await supabase.from('roles').select('id').eq('name', realRoleName).single();
         if (rolesData) {
+          const orgUnit = db.departments.find(d => d.name === u.dept);
+          const orgUnitId = orgUnit ? orgUnit.id : null;
+
           const { error } = await supabase.from('users').update({
             full_name: u.name,
-            dept: u.dept || null,
+            organization_unit_id: orgUnitId,
             role_id: rolesData.id
           }).eq('id', u.id);
 
@@ -135,13 +138,13 @@ export default function UsersPage() {
   return (
     <div className="page fade-in">
       <PageHead title="إدارة المستخدمين" sub="إدارة حسابات المستخدمين وصلاحياتهم">
-        <button className="btn btn-primary btn-sm" onClick={() => setEdit({ id: null, name: '', email: '', role: 'viewer', dept: null, active: true })}><Plus size={15} /> مستخدم جديد</button>
+        <button className="btn btn-primary btn-sm" onClick={() => setEdit({ id: null, name: '', email: '', role: 'ceo', dept: null, active: true })}><Plus size={15} /> مستخدم جديد</button>
       </PageHead>
 
       <div className="stat-grid" style={{ marginBottom: 16 }}>
         <StatCard icon={Users} label="إجمالي المستخدمين" value={(db.users || []).length} />
-        <StatCard icon={Shield} label="مدراء وصلاحيات كاملة" value={byRole.ceo + byRole.strategy_manager} color="var(--brand-deep)" bg="color-mix(in srgb,var(--brand-deep) 12%,transparent)" />
-        <StatCard icon={Building2} label="مدراء الإدارات" value={byRole.dept_manager} color="var(--gold)" bg="color-mix(in srgb,var(--gold) 18%,transparent)" />
+        <StatCard icon={Shield} label="مدراء وصلاحيات كاملة" value={byRole.ceo + byRole.strategy_office} color="var(--brand-deep)" bg="color-mix(in srgb,var(--brand-deep) 12%,transparent)" />
+        <StatCard icon={Building2} label="مدراء الإدارات" value={byRole.manager} color="var(--gold)" bg="color-mix(in srgb,var(--gold) 18%,transparent)" />
         <StatCard icon={Users} label="نشِط" value={(db.users || []).filter((u) => u.active).length} color="var(--st-completed)" bg="color-mix(in srgb,var(--st-completed) 12%,transparent)" />
       </div>
 

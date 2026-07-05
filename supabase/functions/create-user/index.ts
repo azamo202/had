@@ -44,8 +44,8 @@ serve(async (req) => {
       .eq('id', authUser.id)
       .single();
       
-    if (requestorPublic?.roles?.name !== 'مدير الاستراتيجية') {
-      throw new Error('Forbidden: Only Strategy Manager can create users.')
+    if (requestorPublic?.roles?.name !== 'مدير المنصة' && requestorPublic?.roles?.name !== 'مدير الاستراتيجية') {
+      throw new Error('Forbidden: Only Strategy/Platform Manager can create users.')
     }
 
     // 3. Extract request body
@@ -56,7 +56,7 @@ serve(async (req) => {
 
     // Map frontend roles to backend role names if necessary
     let realRoleName = roleName;
-    if (roleName === 'strategy_manager') realRoleName = 'مدير الاستراتيجية';
+    if (roleName === 'strategy_manager') realRoleName = 'مدير المنصة';
     else if (roleName === 'ceo') realRoleName = 'المدير التنفيذي';
     else if (roleName === 'dept_manager') realRoleName = 'مدير ادارة';
     else if (roleName === 'section_head') realRoleName = 'رئيس قسم';
