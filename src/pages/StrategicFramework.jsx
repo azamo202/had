@@ -173,8 +173,8 @@ export default function StrategicFramework() {
             <div className="label-gray" style={{ color: '#fff', borderRadius: 12, display: 'grid', placeItems: 'center', fontWeight: 700, fontSize: 15 }}>
               المستفيدين
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-              {['1. تقديم تجربة إيمانية وثقافية ثرية للقاصدين.', '2. تعظيم المنافع الإيمانية والتنموية في رحلة الحاج والمعتمر والزائر.', '3. التكامل مع الجهات ذات العلاقة بخدمة ضيوف الرحمن.'].map(v => (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+              {['1. تقديم تجربة إيمانية وثقافية ثرية لضيوف الرحمن.', '2. التكامل مع الجهات ذات العلاقة بخدمة ضيوف الرحمن.'].map(v => (
                 <div key={v} className="strat-box" style={{ background: '#fff', border: `1px solid ${colors.grayBorder}`, borderRadius: 12, padding: '20px 16px', textAlign: 'center', color: colors.grayText, fontWeight: 600, fontSize: 13.5, display: 'grid', placeItems: 'center', lineHeight: 1.6, boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
                   {v}
                 </div>
@@ -186,7 +186,7 @@ export default function StrategicFramework() {
               العمليات
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-              {['4. بناء منظومة ريادية في الابتكار وتطوير الأعمال.', '5. تطوير كفاءة سلاسل الإمداد واستدامتها.', '6. تعزيز المكانة المتميزة للجمعية.'].map(v => (
+              {['3. بناء منظومة ريادية في الابتكار وتطوير الأعمال.', '4. تطوير كفاءة سلاسل الإمداد واستدامتها.', '5. تعزيز المكانة المتميزة للجمعية.'].map(v => (
                 <div key={v} className="strat-box brand-hover" style={{ background: colors.brandTint, border: `1px solid #b7e3de`, borderRadius: 12, padding: '20px 16px', textAlign: 'center', color: colors.brandDeep, fontWeight: 600, fontSize: 13.5, display: 'grid', placeItems: 'center', lineHeight: 1.6 }}>
                   {v}
                 </div>
@@ -198,7 +198,7 @@ export default function StrategicFramework() {
               الممكنات
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-              {['7. تطوير القدرات التنظيمية والرقمية وفق معايير التميز المؤسسي.', '8. تمكين الكفاءات الوظيفية والتطوعية المتخصصة.'].map(v => (
+              {['6. تطوير القدرات التنظيمية والرقمية وفق معايير التميز المؤسسي.', '7. تمكين الكفاءات الوظيفية والتطوعية المتخصصة.'].map(v => (
                 <div key={v} className="strat-box" style={{ background: '#fff', border: `1px solid ${colors.grayBorder}`, borderRadius: 12, padding: '20px 16px', textAlign: 'center', color: colors.grayText, fontWeight: 600, fontSize: 13.5, display: 'grid', placeItems: 'center', lineHeight: 1.6, boxShadow: '0 2px 6px rgba(0,0,0,0.02)' }}>
                   {v}
                 </div>
@@ -211,7 +211,7 @@ export default function StrategicFramework() {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
               <div className="strat-box brand-hover" style={{ background: colors.brandTint, border: `1px solid #b7e3de`, borderRadius: 12, padding: '20px 16px', textAlign: 'center', color: colors.brandDeep, fontWeight: 600, fontSize: 13.5, display: 'grid', placeItems: 'center', lineHeight: 1.6 }}>
-                9. تنمية الموارد المالية والأصول الوقفية والاستثمارية.
+                8. تنمية الموارد المالية والأصول الوقفية والاستثمارية.
               </div>
             </div>
 

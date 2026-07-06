@@ -4,7 +4,7 @@ import { CheckCircle2, XCircle, AlertCircle, FileText, ExternalLink, Filter } fr
 import { useApp, sendNotification } from '../store/AppContext.jsx';
 import { APPROVAL_STATUS, fmt } from '../lib/status.js';
 import { Avatar } from '../components/ui/Primitives.jsx';
-import { Confirm } from '../components/ui/Overlays.jsx';
+import { Confirm, Modal } from '../components/ui/Overlays.jsx';
 import { supabase } from '../lib/supabaseClient.js';
 
 const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليه', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
@@ -20,7 +20,8 @@ export default function UpdateRequests() {
   const nav = useNavigate();
   const idx = useMemo(() => makeIndex(db), [db]);
   const [filter, setFilter] = useState('pending'); // pending, approved, rejected, needs_modification
-  const [rejectPrompt, setRejectPrompt] = useState(null); // null or { item, action: 'rejected' | 'needs_modification' }
+  const [actionPrompt, setActionPrompt] = useState(null); // null or { item, action: 'approved' | 'rejected' | 'needs_modification' }
+  const [reason, setReason] = useState('');
 
   // Restrict to Strategy Manager
   if (user?.role !== 'strategy_office' && user?.role !== 'strategy') {
@@ -49,7 +50,27 @@ export default function UpdateRequests() {
 
       if (error) throw error;
 
+      if (error) throw error;
+
       dispatch({ type: 'APPROVAL_DECIDE', id: ap.id, decision, by: user.name, comment });
+
+      if (decision === 'approved' && comment && comment.trim()) {
+        const project = idx.p[ap.projectId] || {};
+        dispatch({
+          type: 'UPSERT',
+          entity: 'challenges',
+          item: {
+            id: 'C' + Date.now(),
+            projectId: ap.projectId,
+            kpiId: null,
+            text: comment.trim(),
+            dept: project.dept || ap.dept,
+            severity: 'high',
+            status: 'open',
+            isImportant: true
+          }
+        });
+      }
 
       // Send real notification to the original submitter
       const { data: updateRow } = await supabase
@@ -80,7 +101,7 @@ export default function UpdateRequests() {
         });
       }
       toast(decision === 'approved' ? 'تم اعتماد التحديث' : (decision === 'rejected' ? 'تم رفض التحديث' : 'تم طلب التعديل'), decision === 'approved' ? 'success' : 'attention');
-      setRejectPrompt(null);
+      setActionPrompt(null);
     } catch (err) {
       console.error(err);
       toast('حدث خطأ أثناء الاتصال بالخادم', 'error');
@@ -188,13 +209,13 @@ export default function UpdateRequests() {
 
               {ap.status === 'pending' && (
                 <div className="row" style={{ gap: 8, marginTop: 'auto', paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-                  <button className="btn btn-sm" style={{ flex: 1, background: 'var(--st-completed)', color: '#fff', border: 'none' }} onClick={() => decide(ap, 'approved')}>
+                  <button className="btn btn-sm" style={{ flex: 1, background: 'var(--st-completed)', color: '#fff', border: 'none' }} onClick={() => setActionPrompt({ item: ap, action: 'approved' })}>
                     <CheckCircle2 size={14} /> قبول
                   </button>
-                  <button className="btn btn-sm btn-soft" style={{ flex: 1, color: 'var(--st-attention)' }} onClick={() => setRejectPrompt({ item: ap, action: 'needs_modification' })}>
+                  <button className="btn btn-sm btn-soft" style={{ flex: 1, color: 'var(--st-attention)' }} onClick={() => setActionPrompt({ item: ap, action: 'needs_modification' })}>
                     <AlertCircle size={14} /> طلب تعديل
                   </button>
-                  <button className="btn btn-sm" style={{ flex: 1, background: '#7f1d1d', color: '#fff', border: 'none' }} onClick={() => setRejectPrompt({ item: ap, action: 'rejected' })}>
+                  <button className="btn btn-sm" style={{ flex: 1, background: '#7f1d1d', color: '#fff', border: 'none' }} onClick={() => setActionPrompt({ item: ap, action: 'rejected' })}>
                     <XCircle size={14} /> رفض
                   </button>
                 </div>
@@ -204,15 +225,38 @@ export default function UpdateRequests() {
         </div>
       )}
 
-      {rejectPrompt && (
-        <Confirm 
-          title={rejectPrompt.action === 'rejected' ? "رفض التحديث" : "طلب تعديل"} 
-          message={rejectPrompt.action === 'rejected' ? "سيتم رفض هذا التحديث ولن يتم اعتماده." : "سيُعاد التحديث لمقدّمه لإجراء التعديلات اللازمة."} 
-          confirmLabel={rejectPrompt.action === 'rejected' ? "تأكيد الرفض" : "إرسال طلب التعديل"} 
-          danger={rejectPrompt.action === 'rejected'} 
-          onConfirm={() => decide(rejectPrompt.item, rejectPrompt.action, 'يرجى مراجعة الملاحظات وتصحيح الخلل.')} 
-          onClose={() => setRejectPrompt(null)} 
-        />
+      {actionPrompt && (
+        <Modal 
+          title={actionPrompt.action === 'approved' ? "اعتماد التحديث" : (actionPrompt.action === 'rejected' ? "رفض التحديث" : "طلب تعديل")} 
+          onClose={() => { setActionPrompt(null); setReason(''); }}
+        >
+          <div style={{ padding: '10px 0 20px', display: 'grid', gap: 16 }}>
+            <p className="muted" style={{ fontSize: 14, margin: 0 }}>
+              {actionPrompt.action === 'approved' 
+                ? "التحديات الحرجة (تظهر للإدارة العليا في لوحة المعلومات - اختياري):"
+                : (actionPrompt.action === 'rejected' ? "يرجى كتابة سبب الرفض." : "يرجى كتابة ملاحظات التعديل المطلوبة ليتمكن مدير الإدارة من مراجعتها وتصحيحها.")}
+            </p>
+            <textarea 
+              className="txta" 
+              placeholder={actionPrompt.action === 'approved' ? "لخص أهم التحديات هنا..." : "اكتب الملاحظات هنا..."} 
+              value={reason} 
+              onChange={(e) => setReason(e.target.value)}
+              style={{ minHeight: actionPrompt.action === 'approved' ? 80 : 120 }}
+              autoFocus
+            />
+            <div className="row" style={{ justifyContent: 'flex-end', gap: 12, marginTop: 8 }}>
+              <button className="btn btn-ghost" onClick={() => { setActionPrompt(null); setReason(''); }}>إلغاء</button>
+              <button 
+                className="btn btn-primary" 
+                onClick={() => { decide(actionPrompt.item, actionPrompt.action, reason); setReason(''); }} 
+                disabled={actionPrompt.action !== 'approved' && !reason.trim()} 
+                style={{ background: actionPrompt.action === 'approved' ? 'var(--st-completed)' : (actionPrompt.action === 'rejected' ? '#7f1d1d' : 'var(--st-delayed)') }}
+              >
+                {actionPrompt.action === 'approved' ? "تأكيد الاعتماد" : (actionPrompt.action === 'rejected' ? "تأكيد الرفض" : "إرسال طلب التعديل")}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );

@@ -51,7 +51,7 @@ export default function MonthlyFollowup() {
   const project = selectedPid ? idx.p[selectedPid] : null;
   const kpis = project ? db.kpis.filter((k) => k.projectId === project.id) : [];
   
-  const [month, setMonth] = useState('أغسطس');
+  const [month, setMonth] = useState('يوليه');
   const [notes, setNotes] = useState('');
   const [support, setSupport] = useState('');
   const [evType, setEvType] = useState(EV_TYPES[0]);
@@ -59,8 +59,9 @@ export default function MonthlyFollowup() {
   const [evDesc, setEvDesc] = useState('');
   const [evLink, setEvLink] = useState('');
   
-  const [rejectModal, setRejectModal] = useState(false);
+  const [showRejectBox, setShowRejectBox] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [criticalChallenge, setCriticalChallenge] = useState('');
 
   // Initial setup if query param exists
   useEffect(() => {
@@ -147,13 +148,24 @@ export default function MonthlyFollowup() {
     const monthNum = MONTHS.indexOf(month) + 1;
     dispatch({ type: 'KPI_MONTH', kpiId, month: monthNum, patch: { actual: numVal } });
     
-    const { error } = await supabase.from('indicator_monthly_values')
+    // Update the actual value
+    const { error: indError } = await supabase.from('indicator_monthly_values')
       .update({ achieved_value: numVal })
       .eq('indicator_id', kpiId)
       .eq('month', monthNum);
       
-    if (error) {
-      console.error(error);
+    // Ensure a monthly_updates record exists so this value isn't treated as 'imported'
+    const { error: updError } = await supabase.from('monthly_updates')
+      .upsert({
+        project_id: project.id,
+        reporting_month: monthNum,
+        reporting_year: new Date().getFullYear(),
+        status: approval?.status || 'draft',
+        created_by: user.id
+      }, { onConflict: 'project_id, reporting_year, reporting_month', ignoreDuplicates: true });
+
+    if (indError || updError) {
+      console.error(indError, updError);
       toast('حدث خطأ أثناء الاتصال بالخادم، لم يتم الحفظ', 'error');
     }
   };
@@ -236,13 +248,13 @@ export default function MonthlyFollowup() {
   const decide = async (decision) => {
     try {
       const monthInt = MONTHS.indexOf(month) + 1;
-      const decisionLabel = decision === 'approved' ? 'معتمد' : 'مرفوض';
+      const decisionLabel = decision === 'approved' ? 'معتمد' : 'مطلوب التعديل';
 
       // Persist decision to Supabase
       const { error } = await supabase.from('monthly_updates')
         .update({
           status: decision,
-          ...(decision === 'rejected' && rejectReason ? { rejection_reason: rejectReason } : {})
+          ...(decision === 'needs_modification' && rejectReason ? { rejection_reason: rejectReason } : {})
         })
         .eq('project_id', project.id)
         .eq('reporting_month', monthInt);
@@ -250,6 +262,23 @@ export default function MonthlyFollowup() {
       if (error) throw error;
 
       dispatch({ type: 'APPROVAL_DECIDE', id: approval.id, decision, comment: rejectReason, by: user.name });
+
+      if (decision === 'approved' && criticalChallenge.trim()) {
+        dispatch({
+          type: 'UPSERT',
+          entity: 'challenges',
+          item: {
+            id: 'C' + Date.now(),
+            projectId: project.id,
+            kpiId: null,
+            text: criticalChallenge.trim(),
+            dept: project.dept || user.dept,
+            severity: 'high',
+            status: 'open',
+            isImportant: true
+          }
+        });
+      }
 
       // ─── Send real notification to the original submitter ───
       // Find the submitter in db.users by name (approval.submittedBy) or fetch from Supabase
@@ -264,11 +293,11 @@ export default function MonthlyFollowup() {
         const notifType = decision === 'approved' ? 'update_approved' : 'update_rejected';
         const titleMap = {
           approved: `تم اعتماد تحديث شهر ${month}: ${project.name}`,
-          rejected: `تم رفض تحديث شهر ${month}: ${project.name}`,
+          needs_modification: `طلب تعديل لتحديث شهر ${month}: ${project.name}`,
         };
         const bodyMap = {
           approved: `قام ${user.name} باعتماد تحديثك لشهر ${month} لمشروع "${project.name}".`,
-          rejected: `قام ${user.name} برفض تحديثك لشهر ${month}${rejectReason ? ': ' + rejectReason : ''}. يرجى معالجة الملاحظات وإعادة الإرسال.`,
+          needs_modification: `أرسل ${user.name} ملاحظات لتعديل تحديثك لشهر ${month}${rejectReason ? ': ' + rejectReason : ''}. يرجى معالجة الملاحظات وإعادة الإرسال.`,
         };
         await sendNotification({
           userId: updateRow.created_by,
@@ -279,12 +308,12 @@ export default function MonthlyFollowup() {
         });
       }
 
-      toast(decision === 'approved' ? 'تم الاعتماد بنجاح' : 'تم الرفض وتم إشعار الإدارة', decision === 'approved' ? 'success' : 'error');
+      toast(decision === 'approved' ? 'تم الاعتماد بنجاح' : 'تم إرسال طلب التعديل بنجاح', decision === 'approved' ? 'success' : 'attention');
     } catch (err) {
       console.error(err);
       toast('حدث خطأ أثناء حفظ القرار', 'error');
     }
-    setRejectModal(false);
+    setShowRejectBox(false);
     setRejectReason('');
   };
 
@@ -507,18 +536,51 @@ export default function MonthlyFollowup() {
             <div className="card pad" style={{ padding: 20 }}>
               <h3 className="row" style={{ gap: 8, marginBottom: 16, fontSize: 16, color: 'var(--brand-deep)' }}><Calendar size={18} />أشهر المتابعة والتنفيذ</h3>
               <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-                {MONTHS.map((m) => {
+
+                {/* ── النصف الأول 2026 special button ───────────── */}
+                {(() => {
+                  const h1Months = [1, 2, 3, 4, 5, 6];
+                  const h1HasData = h1Months.some(mn =>
+                    kpis.some(k => {
+                      const mData = k.monthly?.find(x => x.month === mn);
+                      return mData && (mData.target != null || mData.actual != null);
+                    })
+                  );
+                  const isH1Selected = month === 'h1';
+                  return (
+                    <button
+                      onClick={() => setMonth('h1')}
+                      title="النصف الأول 2026 (يناير - يونيو)"
+                      style={{
+                        padding: '10px 16px', borderRadius: 8, fontWeight: 600, fontSize: 13,
+                        background: isH1Selected ? 'var(--brand)' : 'var(--bg)',
+                        color: isH1Selected ? '#fff' : 'var(--brand-deep)',
+                        border: `1px solid ${isH1Selected ? 'var(--brand)' : 'var(--brand)'}`,
+                        cursor: 'pointer', opacity: 1,
+                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                        minWidth: 90, lineHeight: 1.3
+                      }}
+                    >
+                      <Calendar size={15} style={{ marginBottom: 2 }} />
+                      النصف الأول
+                      <span style={{ fontSize: 11, opacity: 0.8 }}>2026</span>
+                    </button>
+                  );
+                })()}
+
+                {/* ── يوليه → ديسمبر individual months ─────────── */}
+                {['يوليه', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'].map((m) => {
                   const active = isMonthActive(m);
                   const isSelected = month === m;
                   const statusColor = getMonthStatusColor(m);
-                  
+
                   let bg = 'var(--bg-2)';
                   let color = 'var(--text-3)';
                   let border = '1px solid var(--border)';
-                  let cursor = 'not-allowed';
-                  let opacity = 0.5;
+                  let cursor = 'default';
+                  let opacity = 0.6;
 
-                  if (active) {
+                  if (active || true) { // always clickable — user can enter data
                     cursor = 'pointer';
                     opacity = 1;
                     if (isSelected) {
@@ -532,10 +594,10 @@ export default function MonthlyFollowup() {
                   }
 
                   return (
-                    <button 
-                      key={m} 
-                      onClick={() => { if(active) setMonth(m); }}
-                      style={{ 
+                    <button
+                      key={m}
+                      onClick={() => setMonth(m)}
+                      style={{
                         padding: '10px 16px', borderRadius: 8, fontWeight: 600, fontSize: 14,
                         background: bg, color: color, border: border, cursor: cursor, opacity: opacity,
                         transition: 'all 0.2s', minWidth: 70, textAlign: 'center', position: 'relative'
@@ -554,10 +616,46 @@ export default function MonthlyFollowup() {
             {/* 3. KPIs */}
             <div className="card pad" style={{ padding: 24 }}>
               <div className="card-head" style={{ marginBottom: 20 }}>
-                <h3 className="row" style={{ gap: 8, fontSize: 17 }}><Gauge size={20} style={{ color: 'var(--brand)' }} />مؤشرات المشروع — شهر {month}</h3>
+                <h3 className="row" style={{ gap: 8, fontSize: 17 }}><Gauge size={20} style={{ color: 'var(--brand)' }} />
+                  {month === 'h1' ? 'ملخص النصف الأول 2026 (يناير — يونيو)' : `مؤشرات المشروع — شهر ${month}`}
+                </h3>
               </div>
-              
-              {kpis.length === 0 ? <EmptyState icon={Gauge} title="لا توجد مؤشرات" /> : (
+
+              {/* H1 Summary View */}
+              {month === 'h1' && (
+                <div style={{ display: 'grid', gap: 20 }}>
+                  {kpis.length === 0 ? <EmptyState icon={Gauge} title="لا توجد مؤشرات" /> : kpis.map(k => {
+                    const h1Months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو'];
+                    const isPct = k.targetPct || String(k.targetRaw || '').includes('%') || String(k.name || '').includes('نسبة');
+                    return (
+                      <div key={k.id} style={{ border: '1px solid var(--border)', borderRadius: 14, padding: 20, background: 'var(--bg)' }}>
+                        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 14, color: 'var(--brand-deep)' }}>{k.name}</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
+                          {h1Months.map((mName, idx) => {
+                            const mNum = idx + 1;
+                            const md = k.monthly?.find(x => x.month === mNum) || {};
+                            return (
+                              <div key={mName} style={{ background: 'var(--bg-2)', borderRadius: 10, padding: '10px 8px', textAlign: 'center' }}>
+                                <div style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 600, marginBottom: 6 }}>{mName}</div>
+                                <div style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 4 }}>
+                                  المستهدف: <b>{md.target != null ? md.target + (isPct ? '%' : '') : '—'}</b>
+                                </div>
+                                <div style={{ fontSize: 13, color: md.actual != null ? 'var(--st-completed)' : 'var(--text-4)' }}>
+                                  المنجز: <b>{md.actual != null ? md.actual + (isPct ? '%' : '') : '—'}</b>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Normal month KPI view */}
+              {month !== 'h1' && (
+              kpis.length === 0 ? <EmptyState icon={Gauge} title="لا توجد مؤشرات" /> : (
                 <div style={{ display: 'grid', gap: 16 }}>
                   {kpis.map((k) => {
                     const monthNum = MONTHS.indexOf(month) + 1;
@@ -614,8 +712,8 @@ export default function MonthlyFollowup() {
                       </div>
                     );
                   })}
-                </div>
-              )}
+                 </div>
+              ))}
             </div>
 
             {/* 4. Challenges and Support */}
@@ -710,9 +808,30 @@ export default function MonthlyFollowup() {
 
             {/* Re-submit action for rejected or needs_modification */}
             {(isManager || isStrategy) && (approval?.status === 'rejected' || approval?.status === 'needs_modification') && (
-              <div className="card pad row between" style={{ flexWrap: 'wrap', gap: 12, position: 'sticky', bottom: 12, background: 'color-mix(in srgb, var(--brand) 5%, rgba(255,255,255,0.95))', backdropFilter: 'blur(8px)', zIndex: 10, border: '1px solid var(--brand)' }}>
-                <span className="row" style={{ gap: 7, fontSize: 13, fontWeight: 600, color: 'var(--brand-deep)' }}><TriangleAlert size={16} />يرجى معالجة الملاحظات ثم إعادة الإرسال للمراجعة.</span>
-                <button className="btn btn-primary" onClick={() => submit(false)} style={{ padding: '12px 24px', fontSize: 15 }}><Send size={18} /> إعادة إرسال للمراجعة</button>
+              <div className="card pad" style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'sticky', bottom: 12, background: 'color-mix(in srgb, var(--brand) 5%, rgba(255,255,255,0.95))', backdropFilter: 'blur(8px)', zIndex: 10, border: '1px solid var(--brand)' }}>
+                {approval.comments?.length > 0 && (
+                  <div style={{ background: 'rgba(255,255,255,0.7)', padding: '12px 16px', borderRadius: 8, border: '1px dashed var(--brand)' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8, color: 'var(--st-delayed)' }}>ملاحظات التعديل المطلوبة:</div>
+                    <div style={{ display: 'grid', gap: 8 }}>
+                      {approval.comments.map((c, idx) => (
+                        <div key={idx} style={{ fontSize: 13.5, color: 'var(--text)', lineHeight: 1.5 }}>
+                          <span className="muted" style={{ fontWeight: 600, marginInlineEnd: 6 }}>{c.by}:</span> 
+                          {c.text}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {isStrategy ? (
+                  <div className="row" style={{ gap: 7, fontSize: 13, fontWeight: 600, color: 'var(--brand-deep)' }}>
+                    <Info size={16} />لقد قمت بطلب تعديل على هذا التحديث. الطلب الآن بانتظار تجاوب مدير الإدارة لمعالجة الملاحظات.
+                  </div>
+                ) : (
+                  <div className="row between" style={{ flexWrap: 'wrap', gap: 12 }}>
+                    <span className="row" style={{ gap: 7, fontSize: 13, fontWeight: 600, color: 'var(--brand-deep)' }}><TriangleAlert size={16} />يرجى معالجة الملاحظات وتصحيح المنجزات أو التحديات ثم إعادة الإرسال للمراجعة.</span>
+                    <button className="btn btn-primary" onClick={() => submit(false)} style={{ padding: '12px 24px', fontSize: 15 }}><Send size={18} /> إعادة إرسال للمراجعة</button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -726,12 +845,45 @@ export default function MonthlyFollowup() {
 
             {/* Actions for Strategy Office */}
             {isStrategy && approval?.status === 'pending' && (
-              <div className="card pad row between" style={{ flexWrap: 'wrap', gap: 12, position: 'sticky', bottom: 12, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', zIndex: 10, border: '2px solid var(--brand)' }}>
-                <span className="brand row" style={{ gap: 7, fontSize: 14, fontWeight: 600 }}><Info size={16} />بانتظار مراجعتك واعتمادك.</span>
-                <div className="row" style={{ gap: 12 }}>
-                  <button className="btn btn-ghost" onClick={() => setRejectModal(true)} style={{ color: 'var(--st-delayed)', border: '1px solid var(--border)' }}><X size={18} /> رفض التحديث</button>
-                  <button className="btn btn-primary" onClick={() => decide('approved')} style={{ padding: '12px 24px', fontSize: 15, background: 'var(--st-completed)' }}><Check size={18} /> اعتماد التحديث</button>
-                </div>
+              <div className="card pad" style={{ display: 'flex', flexDirection: 'column', gap: 16, position: 'sticky', bottom: 12, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(8px)', zIndex: 10, border: '2px solid var(--brand)' }}>
+                {!showRejectBox ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div className="row between" style={{ flexWrap: 'wrap', gap: 12 }}>
+                      <span className="brand row" style={{ gap: 7, fontSize: 14, fontWeight: 600 }}><Info size={16} />بانتظار مراجعتك واعتمادك.</span>
+                    </div>
+                    <div>
+                      <p className="muted" style={{ fontSize: 13, marginBottom: 8, marginTop: 0 }}>التحديات الحرجة (تظهر للإدارة العليا في لوحة المعلومات - اختياري):</p>
+                      <textarea 
+                        className="txta" 
+                        placeholder="لخص أهم التحديات هنا ليتم عرضها في لوحة المعلومات..." 
+                        value={criticalChallenge} 
+                        onChange={(e) => setCriticalChallenge(e.target.value)}
+                        style={{ minHeight: 60 }}
+                      />
+                    </div>
+                    <div className="row" style={{ gap: 12, justifyContent: 'flex-end', marginTop: 4 }}>
+                      <button className="btn btn-ghost" onClick={() => setShowRejectBox(true)} style={{ color: 'var(--st-delayed)', border: '1px solid var(--border)' }}><X size={18} /> طلب تعديل</button>
+                      <button className="btn btn-primary" onClick={() => decide('approved')} style={{ padding: '12px 24px', fontSize: 15, background: 'var(--st-completed)' }}><Check size={18} /> قبول التحديث</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, animation: 'fade .2s ease' }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--st-delayed)' }}>طلب تعديل على الإنجاز</div>
+                    <p className="muted" style={{ fontSize: 13, margin: 0 }}>يرجى كتابة ملاحظات التعديل المطلوبة ليتمكن مدير الإدارة من مراجعتها وتصحيحها.</p>
+                    <textarea 
+                      className="txta" 
+                      placeholder="اكتب ملاحظات التعديل هنا..." 
+                      value={rejectReason} 
+                      onChange={(e) => setRejectReason(e.target.value)}
+                      style={{ minHeight: 90 }}
+                      autoFocus
+                    />
+                    <div className="row" style={{ justifyContent: 'flex-end', gap: 10 }}>
+                      <button className="btn btn-ghost" onClick={() => { setShowRejectBox(false); setRejectReason(''); }}>إلغاء</button>
+                      <button className="btn btn-primary" onClick={() => decide('needs_modification')} disabled={!rejectReason.trim()} style={{ background: 'var(--st-delayed)' }}>إرسال طلب التعديل</button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             
@@ -740,25 +892,6 @@ export default function MonthlyFollowup() {
 
       </div>
 
-      {rejectModal && (
-        <Modal title="رفض تحديث الإنجاز" onClose={() => setRejectModal(false)} width={480}>
-          <div style={{ padding: '10px 0 20px', display: 'grid', gap: 16 }}>
-            <p className="muted" style={{ fontSize: 14, margin: 0 }}>يرجى توضيح سبب الرفض ليتمكن مدير الإدارة من تدارك الملاحظات وتصحيحها.</p>
-            <textarea 
-              className="txta" 
-              placeholder="اكتب سبب الرفض هنا..." 
-              value={rejectReason} 
-              onChange={(e) => setRejectReason(e.target.value)}
-              style={{ minHeight: 120 }}
-              autoFocus
-            />
-            <div className="row" style={{ justifyContent: 'flex-end', gap: 12, marginTop: 8 }}>
-              <button className="btn btn-ghost" onClick={() => setRejectModal(false)}>إلغاء</button>
-              <button className="btn btn-primary" onClick={() => decide('rejected')} disabled={!rejectReason.trim()} style={{ background: 'var(--st-delayed)' }}>تأكيد الرفض</button>
-            </div>
-          </div>
-        </Modal>
-      )}
       
       <style dangerouslySetInnerHTML={{__html: `
         .hover-brand:hover { color: var(--brand) !important; }

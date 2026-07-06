@@ -32,17 +32,34 @@ function loadPersisted() {
   return null;
 }
 
-function recomputeKpi(k, rules) {
+function recomputeKpi(k, rules, approvals) {
   const has = k.targetNum != null && k.targetNum > 0;
-  const monthlySum = (k.monthly || []).reduce((s, m) => s + (m.actual != null ? m.actual : 0), 0);
-  const achieved = has ? (k.baselineNum || 0) + monthlySum : null;
-  const pct = has ? clampPct((achieved / k.targetNum) * 100) : null;
+
+  // مجموع المنجز الفعلي (يحسب فقط القيم المعتمدة أو المستوردة التي ليس لها طلب تحديث)
+  const approvedSum = (k.monthly || []).reduce((s, m) => {
+    if (m.actual == null) return s;
+    const appRecord = approvals?.find(a => a.projectId === k.projectId && a.monthNum === m.month);
+    // تُحسب القيمة إذا كان التحديث معتمدًا، أو إذا لم يوجد سجل تحديث (يُعتبر مستورداً من الإكسل)
+    const isApprovedOrImported = appRecord ? appRecord.status === 'approved' : true;
+    return s + (isApprovedOrImported ? Number(m.actual) : 0);
+  }, 0);
+
+  const achieved = has ? approvedSum : null;
+
+  // إصلاح خطأ الوحدات: إذا كان المؤشر نسبة مئوية والهدف مخزّن كعشري (0–0.999)
+  // بينما المنجز يُدخل كعدد صحيح (0–100)، نضرب الهدف في 100 لتوحيد الوحدات
+  const isPctKpi = k.targetPct || String(k.targetRaw || '').includes('%') || String(k.name || '').includes('نسبة');
+  const effectiveTarget = (isPctKpi && k.targetNum > 0 && k.targetNum <= 1)
+    ? k.targetNum * 100  // تحويل 0.5 → 50 لتتوافق مع مدخلات المستخدم
+    : k.targetNum;
+
+  const pct = has ? clampPct((achieved / effectiveTarget) * 100) : null;
   return { ...k, achievedNum: achieved, achievement: pct, status: statusFromPct(pct, has, rules) };
 }
 
 function rollup(db, rules) {
   if (!db || !db.goals) return db;
-  const kpis = (db.kpis || []).map((k) => recomputeKpi(k, rules));
+  const kpis = (db.kpis || []).map((k) => recomputeKpi(k, rules, db.approvals));
   const projects = (db.projects || []).map((p) => {
     const allPk = kpis.filter((k) => k.projectId === p.id);
     const pk = allPk.filter((k) => k.achievement != null);
@@ -114,7 +131,24 @@ function reducer(state, a) {
     case 'KPI_MONTH': {
       const kpis = state.db.kpis.map((k) => {
         if (k.id !== a.kpiId) return k;
+        // Ensure the month slot exists
         const monthly = k.monthly.map((m) => (m.month === a.month ? { ...m, ...a.patch } : m));
+        // If the month wasn't in the array yet, add it
+        const exists = k.monthly.some(m => m.month === a.month);
+        const finalMonthly = exists ? monthly : [...monthly, { month: a.month, ...a.patch }];
+        return { ...k, monthly: finalMonthly };
+      });
+      return { ...state, db: rollup({ ...state.db, kpis }, state.rules) };
+    }
+    // Refresh specific KPI monthly values from Supabase payload
+    case 'REFRESH_KPI_MONTHLY': {
+      const { indicatorId, month, achieved_value } = a;
+      const kpis = state.db.kpis.map((k) => {
+        if (k.id !== indicatorId) return k;
+        const exists = k.monthly.some(m => m.month === month);
+        const monthly = exists
+          ? k.monthly.map(m => m.month === month ? { ...m, actual: achieved_value } : m)
+          : [...k.monthly, { month, actual: achieved_value }];
         return { ...k, monthly };
       });
       return { ...state, db: rollup({ ...state.db, kpis }, state.rules) };
@@ -133,19 +167,20 @@ function reducer(state, a) {
     case 'SUBMIT_APPROVAL': {
       const approvals = [...state.db.approvals];
       const idx = approvals.findIndex((x) => x.projectId === a.projectId && x.month === a.month);
+      const monthNum = MONTHS.indexOf(a.month) + 1;
       const rec = {
         id: idx >= 0 ? approvals[idx].id : uid('AP'),
-        projectId: a.projectId, goalId: a.goalId, dept: a.dept, month: a.month,
+        projectId: a.projectId, goalId: a.goalId, dept: a.dept, month: a.month, monthNum,
         status: a.draft ? 'draft' : 'pending', submittedBy: a.by, note: a.note || 'تحديث الإنجاز الشهري', comments: [],
       };
       if (idx >= 0) approvals[idx] = rec; else approvals.push(rec);
-      return { ...state, db: { ...state.db, approvals } };
+      return { ...state, db: rollup({ ...state.db, approvals }, state.rules) };
     }
     case 'APPROVAL_DECIDE': {
       const approvals = state.db.approvals.map((x) =>
         x.id === a.id ? { ...x, status: a.decision, comments: [...(x.comments || []), ...(a.comment ? [{ by: a.by, text: a.comment, decision: a.decision }] : [])] } : x
       );
-      return { ...state, db: { ...state.db, approvals } };
+      return { ...state, db: rollup({ ...state.db, approvals }, state.rules) };
     }
     case 'SET_EVTYPES': {
       return { ...state, db: { ...state.db, evidenceTypes: a.list } };
@@ -324,6 +359,68 @@ export function AppProvider({ children }) {
     };
   }, [state.user?.id, fetchNotifications]);
 
+  // ─── Realtime: indicator_monthly_values — update progress instantly ─────
+  const kpiRealtimeRef = useRef(null);
+  useEffect(() => {
+    if (!state.user?.id) return;
+
+    if (kpiRealtimeRef.current) {
+      supabase.removeChannel(kpiRealtimeRef.current);
+    }
+
+    const ch = supabase
+      .channel('kpi-monthly-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'indicator_monthly_values' },
+        (payload) => {
+          const { indicator_id, month, achieved_value } = payload.new;
+          dispatch({
+            type: 'REFRESH_KPI_MONTHLY',
+            indicatorId: indicator_id,
+            month,
+            achieved_value
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        // When strategy office approves — re-fetch everything for full consistency
+        { event: 'UPDATE', schema: 'public', table: 'monthly_updates' },
+        async (payload) => {
+          if (payload.new.status === 'approved' || payload.new.status === 'rejected') {
+            // Re-fetch monthly values to ensure all changes are reflected
+            const { data } = await supabase
+              .from('indicator_monthly_values')
+              .select('*')
+              .eq('month', payload.new.reporting_month);
+            if (data) {
+              // Batch update all KPIs for this month
+              const kpisUpdated = (data || []).reduce((acc, mv) => {
+                acc[mv.indicator_id] = mv.achieved_value;
+                return acc;
+              }, {});
+              Object.entries(kpisUpdated).forEach(([indicatorId, achieved_value]) => {
+                dispatch({
+                  type: 'REFRESH_KPI_MONTHLY',
+                  indicatorId,
+                  month: payload.new.reporting_month,
+                  achieved_value
+                });
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    kpiRealtimeRef.current = ch;
+    return () => {
+      supabase.removeChannel(ch);
+      kpiRealtimeRef.current = null;
+    };
+  }, [state.user?.id]);
+
   // Fetch Supabase Data on Mount
   useEffect(() => {
     async function fetchData() {
@@ -401,7 +498,8 @@ export function AppProvider({ children }) {
             initiativeId: p.initiative_id,
             goalId: obj?.strategic_goal_id,
             name: p.project_name,
-            dept: p.organization_units?.name || ''
+            dept: p.organization_units?.name || '',
+            executionCost: p.execution_cost ?? null,
           };
         });
 
@@ -464,6 +562,7 @@ export function AppProvider({ children }) {
             goalId: p?.goalId,
             dept: p?.dept,
             month: MONTHS[upd.reporting_month - 1] || String(upd.reporting_month),
+            monthNum: upd.reporting_month,
             status: upd.status || 'pending',
             submittedBy: upd.users?.full_name || 'غير محدد',
             note: upd.notes,

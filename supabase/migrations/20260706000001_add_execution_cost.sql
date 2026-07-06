@@ -1,0 +1,1 @@
+ALTER TABLE operational_projects ADD COLUMN IF NOT EXISTS execution_cost NUMERIC;

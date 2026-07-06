@@ -90,7 +90,7 @@ export default function Dashboard() {
           {/* Top Important Challenges */}
           <div className="card pad">
             <div className="card-head">
-              <h3 className="row" style={{ gap: 8 }}><ShieldAlert size={17} style={{ color: 'var(--st-delayed)' }} />أبرز التحديات التي تتطلب اهتماماً</h3>
+              <h3 className="row" style={{ gap: 8 }}><ShieldAlert size={17} style={{ color: 'var(--st-delayed)' }} />التحديات الحرجة</h3>
             </div>
             <div style={{ display: 'grid', gap: 10, maxHeight: 350, overflowY: 'auto' }}>
               {importantChallenges.map((c) => {
