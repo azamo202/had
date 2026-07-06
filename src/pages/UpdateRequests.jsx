@@ -60,7 +60,7 @@ export default function UpdateRequests() {
           type: 'UPSERT',
           entity: 'challenges',
           item: {
-            id: 'C' + Date.now(),
+            id: 'C_db_' + ap.id,
             projectId: ap.projectId,
             kpiId: null,
             text: comment.trim(),

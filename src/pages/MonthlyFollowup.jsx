@@ -268,7 +268,7 @@ export default function MonthlyFollowup() {
           type: 'UPSERT',
           entity: 'challenges',
           item: {
-            id: 'C' + Date.now(),
+            id: 'C_db_' + approval.id,
             projectId: project.id,
             kpiId: null,
             text: criticalChallenge.trim(),

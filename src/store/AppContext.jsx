@@ -126,7 +126,12 @@ function reducer(state, a) {
       return { ...state, rules, db: rollup(state.db, rules) };
     }
     case 'SET_DB': {
-      return { ...state, db: rollup({ ...state.db, ...a.db }, state.rules) };
+      const mergedDb = { ...state.db, ...a.db };
+      if (a.db.challenges && state.db.challenges) {
+        const localChallenges = state.db.challenges.filter(c => !String(c.id).startsWith('C_db_'));
+        mergedDb.challenges = [...localChallenges, ...a.db.challenges];
+      }
+      return { ...state, db: rollup(mergedDb, state.rules) };
     }
     case 'KPI_MONTH': {
       const kpis = state.db.kpis.map((k) => {
@@ -566,9 +571,25 @@ export function AppProvider({ children }) {
             status: upd.status || 'pending',
             submittedBy: upd.users?.full_name || 'غير محدد',
             note: upd.notes,
-            comments: upd.rejection_reason ? [{ by: 'الاستراتيجية', text: upd.rejection_reason, decision: 'rejected' }] : []
+            comments: (upd.rejection_reason && upd.status !== 'approved') ? [{ by: 'الاستراتيجية', text: upd.rejection_reason, decision: 'rejected' }] : []
           };
         });
+
+        const fetchedChallenges = (monthlyUpdatesData || [])
+          .filter(upd => upd.status === 'approved' && upd.rejection_reason && upd.rejection_reason.trim())
+          .map(upd => {
+            const p = mappedProjects.find(x => x.id === upd.project_id);
+            return {
+              id: 'C_db_' + upd.id,
+              projectId: upd.project_id,
+              kpiId: null,
+              text: upd.rejection_reason,
+              dept: p?.dept || '',
+              severity: 'high',
+              status: 'open',
+              isImportant: true
+            };
+          });
 
         dispatch({
           type: 'SET_DB',
@@ -580,7 +601,8 @@ export function AppProvider({ children }) {
             departments: mappedDepartments,
             users: mappedUsers,
             kpis: mappedKpis,
-            approvals: mappedApprovals
+            approvals: mappedApprovals,
+            challenges: fetchedChallenges
           }
         });
       } catch (err) {
