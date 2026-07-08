@@ -32,7 +32,7 @@ export default function Topbar({ onSearch }) {
     window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k);
   }, [onSearch]);
 
-  const title = TITLES[loc.pathname] || 'منصة إدارة ومتابعة الخطة الاستراتيجية والتشغيلية';
+  const title = TITLES[loc.pathname] || 'منصة الأداء الاستراتيجي والتشغيلي 2026';
 
   return (
     <header className="topbar">

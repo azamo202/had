@@ -89,3 +89,5 @@ export const CHALLENGE_STATUS = {
 };
 
 export const uid = (p = 'X') => p + Math.random().toString(36).slice(2, 8);
+
+export const dispMonth = (m) => m === 'h1' ? 'النصف الأول' : m;

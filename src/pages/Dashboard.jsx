@@ -27,7 +27,7 @@ export default function Dashboard() {
 
   return (
     <div className="page fade-in">
-      <PageHead title={`مرحباً، ${user?.name || ''}`} sub="منصة إدارة ومتابعة الخطة الاستراتيجية والتشغيلية">
+      <PageHead title={`مرحباً، ${user?.name || ''}`} sub="منصة الأداء الاستراتيجي والتشغيلي 2026">
         <span className="badge" style={{ background: 'var(--brand-tint)', color: 'var(--brand-deep)', border: '1px solid var(--brand-100)' }}>
           <TrendingUp size={14} /> النظرة التنفيذية
         </span>

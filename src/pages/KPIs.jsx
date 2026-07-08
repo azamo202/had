@@ -133,7 +133,7 @@ function Detail({ k, db, idx, nav }) {
                 <thead><tr><th>الشهر</th><th>المُنجز</th><th>التحدي</th></tr></thead>
                 <tbody>
                   {history.map((m, n) => (
-                    <tr key={n}><td>{MONTHS[m.month - 1] || m.month}</td><td><b>{fmtVal(m.actual, k.targetPct)}</b></td><td className="muted" style={{ fontSize: 12 }}>{m.challenge || '—'}</td></tr>
+                    <tr key={n}><td>{dispMonth(MONTHS[m.month - 1] || m.month)}</td><td><b>{fmtVal(m.actual, k.targetPct)}</b></td><td className="muted" style={{ fontSize: 12 }}>{m.challenge || '—'}</td></tr>
                   ))}
                 </tbody>
               </table>
@@ -147,7 +147,7 @@ function Detail({ k, db, idx, nav }) {
               <div style={{ display: 'grid', gap: 7 }}>
                 {challenges.slice(0, 4).map((c) => (
                   <div key={c.id} className="row between" style={{ padding: '8px 10px', borderRadius: 8, background: 'var(--surface-2)', fontSize: 12.5 }}>
-                    <span>{c.month} · {c.text || 'تحدٍ'}</span>
+                    <span>{dispMonth(c.month)} · {c.text || 'تحدٍ'}</span>
                     <span className={`badge st-${c.severity === 'high' ? 'delayed' : c.severity === 'medium' ? 'attention' : 'on_track'}`}>{c.severity === 'high' ? 'مرتفع' : c.severity === 'medium' ? 'متوسط' : 'منخفض'}</span>
                   </div>
                 ))}

@@ -65,10 +65,13 @@ export default function Login() {
         <div style={{ position: 'absolute', inset: 0, backgroundImage: 'url(/pattern.png)', backgroundSize: 'auto 120px', backgroundRepeat: 'repeat', opacity: 0.06 }} />
         <div style={{ position: 'absolute', width: 460, height: 460, borderRadius: '50%', background: 'radial-gradient(circle,#84D3A4 0%,transparent 70%)', opacity: 0.18, top: -160, insetInlineStart: -120 }} />
         <img src="/logo.png" alt="هدية" style={{ height: 60, filter: 'brightness(0) invert(1)', alignSelf: 'flex-start', position: 'relative' }} />
-        <div style={{ marginTop: 'auto', position: 'relative' }}>
-          <h1 style={{ fontSize: 40, lineHeight: 1.2, color: '#fff', maxWidth: 460 }}>منصة إدارة ومتابعة الخطة التشغيلية التنفيذية</h1>
+        <div style={{ marginTop: 'auto', position: 'relative', width: '100%' }}>
+          <h1 style={{ fontSize: 'clamp(24px, 3.2vw, 36px)', lineHeight: 1.3, color: '#fff', width: '100%', textAlign: 'right' }}>
+            <span style={{ display: 'block', whiteSpace: 'nowrap' }}>منصة الأداء الاستراتيجي والتشغيلي</span>
+            <span style={{ display: 'block', marginTop: 12, textAlign: 'right' }}>2026</span>
+          </h1>
         </div>
-        <div style={{ marginTop: 30, fontSize: 12.5, opacity: 0.75, position: 'relative' }}>
+        <div style={{ marginTop: 30, fontSize: 12.5, opacity: 0.75, position: 'relative', textAlign: 'right', width: '100%' }}>
           الإصدار 1.0
         </div>
       </div>

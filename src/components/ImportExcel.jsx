@@ -16,7 +16,8 @@ const normalizeSpace = (str) => {
 const isCheck = (val) => {
   if (!val) return false;
   const s = String(val).trim();
-  return s.includes('✔') || s.includes('✓') || s === 'true' || s === '1' || s.toLowerCase() === 'yes';
+  // ✔ (U+2714), ✓ (U+2713), ✔︎ (U+2714 + U+FE0E variation selector), or text booleans
+  return s.includes('\u2714') || s.includes('\u2713') || s.includes('✔') || s.includes('✓') || s === 'true' || s === '1' || s.toLowerCase() === 'yes';
 };
 
 const parseNumeric = (val) => {
@@ -168,8 +169,9 @@ export default function ImportExcel() {
           else if (h0.includes('المشاريع التشغيلية')) projIdx = c;
           else if (h0.includes('مؤشر القياس')) indNameIdx = c;
           else if (h0.includes('خط الأساس')) indBaseIdx = c;
-          // Annual target: take the LAST المستهدف column after the KPI name column (before monthly headers start)
-          else if (h0.includes('المستهدف') && indNameIdx >= 0 && c > indNameIdx && !h0.includes('الشهري')) {
+          // Annual target: the FIRST المستهدف column that comes right after مؤشر القياس.
+          // Lock it once found so monthly sub-headers don't overwrite it.
+          else if (indTgtIdx === -1 && h0.includes('المستهدف') && indNameIdx >= 0 && c > indNameIdx && !h0.includes('الشهري') && !h1.includes('يناير') && !h1.includes('فبراير') && !h1.includes('مارس')) {
             indTgtIdx = c;
           }
 
@@ -182,7 +184,7 @@ export default function ImportExcel() {
             'يناير': 1, 'فبراير': 2, 'مارس': 3, 'أبريل': 4, 'مايو': 5, 'يونيو': 6,
             'يوليه': 7, 'يوليو': 7, 'أغسطس': 8, 'سبتمبر': 9, 'أكتوبر': 10, 'نوفمبر': 11, 'ديسمبر': 12
           };
-          
+
           let mNumMatched = -1;
           for (const [mName, mNum] of Object.entries(mNamesMap)) {
             if (h1.includes(mName) || h0.includes(mName)) {
@@ -190,7 +192,7 @@ export default function ImportExcel() {
               break;
             }
           }
-          
+
           if (mNumMatched !== -1) {
             currentMonthNum = mNumMatched;
           } else if (h0 !== '') {
@@ -287,6 +289,23 @@ export default function ImportExcel() {
               q4: isCheck(row[q4Idx]),
             });
           }
+
+          // ── Accumulate per-initiative fields across multiple rows ────────────
+          // Quarters: The Excel uses vertically-merged cells for q1–q4 at the
+          // initiative level. Due to how merges are propagated, a checkmark may
+          // appear on any row belonging to the initiative (not always row 0).
+          // We OR-accumulate so no quarter is ever lost.
+          const curInit = extractedData.initiatives.get(initKey);
+          if (!curInit.q1 && q1Idx >= 0 && isCheck(row[q1Idx])) curInit.q1 = true;
+          if (!curInit.q2 && q2Idx >= 0 && isCheck(row[q2Idx])) curInit.q2 = true;
+          if (!curInit.q3 && q3Idx >= 0 && isCheck(row[q3Idx])) curInit.q3 = true;
+          if (!curInit.q4 && q4Idx >= 0 && isCheck(row[q4Idx])) curInit.q4 = true;
+          // KPI fields: also fill if missing (first non-null value wins)
+          if (!curInit.effKpi && effKpiIdx >= 0) { const v = normalizeSpace(row[effKpiIdx]); if (v) curInit.effKpi = v; }
+          if (!curInit.effTgt && effTgtIdx >= 0) { const v = normalizeSpace(row[effTgtIdx]); if (v) curInit.effTgt = v; }
+          if (!curInit.effectKpi && effectKpiIdx >= 0) { const v = normalizeSpace(row[effectKpiIdx]); if (v) curInit.effectKpi = v; }
+          if (!curInit.effectTgt && effectTgtIdx >= 0) { const v = normalizeSpace(row[effectTgtIdx]); if (v) curInit.effectTgt = v; }
+          if (!curInit.week && weekIdx >= 0) { const v = normalizeSpace(row[weekIdx]); if (v) curInit.week = v; }
 
           // Accumulate initiative budget from any row belonging to it
           const currentInit = extractedData.initiatives.get(initKey);
@@ -520,7 +539,7 @@ export default function ImportExcel() {
           }
         }
       }
-      
+
       const updatesPayload = Array.from(updatesMap.values());
       for (let i = 0; i < updatesPayload.length; i += 500) {
         const { error } = await supabase.from('monthly_updates').upsert(

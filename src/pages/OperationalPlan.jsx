@@ -154,94 +154,105 @@ export default function OperationalPlan() {
                 p.status === 'delayed'     ? '#ef4444' : '#9ca3af';
 
               // SVG circular progress constants
-              const R = 26;
+              const R = 54;
               const CIRC = 2 * Math.PI * R;
               const dash = (progress / 100) * CIRC;
 
               return (
                 <div key={p.id} className="card pad" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
 
-                  {/* ── Header row: icon + name/dept/cost + progress circle ─── */}
-                  <div style={{ display: 'flex', gap: 14, marginBottom: 16, alignItems: 'flex-start' }}>
-                    {/* folder icon */}
-                    <div style={{ width: 44, height: 44, borderRadius: 10, background: 'var(--brand-tint)', color: 'var(--brand-deep)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                      <FolderKanban size={22} />
-                    </div>
-
-                    {/* name + dept + cost */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <h4 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px 0', color: 'var(--brand-deep)' }}>{p.name}</h4>
-                      <div className="row muted" style={{ gap: 6, fontSize: 13 }}>
-                        <Building2 size={14} /> {p.dept || 'غير محدد'}
-                      </div>
-                      {p.executionCost != null && p.executionCost > 0 && (
-                        <div className="row" style={{ gap: 6, fontSize: 13, marginTop: 8, color: 'var(--text-2)' }}>
-                          <Coins size={14} style={{ color: 'var(--brand)', flexShrink: 0 }} />
-                          <span>تكلفة التنفيذ:</span>
-                          <b style={{ color: 'var(--brand-deep)' }}>{fmtCurrency(p.executionCost)}</b>
+                  <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                    
+                    {/* Right side: Info + KPIs */}
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      
+                      {/* Header row: icon + name/dept/cost */}
+                      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                        {/* folder icon */}
+                        <div style={{ width: 44, height: 44, borderRadius: 10, background: 'var(--brand-tint)', color: 'var(--brand-deep)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                          <FolderKanban size={22} />
                         </div>
-                      )}
+
+                        {/* name + dept + cost */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <h4 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px 0', color: 'var(--brand-deep)' }}>{p.name}</h4>
+                          <div className="row muted" style={{ gap: 6, fontSize: 13 }}>
+                            <Building2 size={14} /> {p.dept || 'غير محدد'}
+                          </div>
+                          {p.executionCost != null && p.executionCost > 0 && (
+                            <div className="row" style={{ gap: 6, fontSize: 13, marginTop: 8, color: 'var(--text-2)' }}>
+                              <Coins size={14} style={{ color: 'var(--brand)', flexShrink: 0 }} />
+                              <span>تكلفة التنفيذ:</span>
+                              <b style={{ color: 'var(--brand-deep)' }}>{fmtCurrency(p.executionCost)}</b>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* ── KPI section: all indicators ──────────────────────── */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div className="row muted" style={{ gap: 6, fontSize: 12.5, fontWeight: 600 }}>
+                          <Target size={14} />
+                          {pKpis.length > 1
+                            ? `مؤشرات قياس المشروع (${pKpis.length})`
+                            : 'مؤشر قياس المشروع'}
+                        </div>
+
+                        {pKpis.length > 0 ? (
+                          pKpis.map((kpi) => (
+                            <div
+                              key={kpi.id}
+                              style={{ background: 'var(--bg-2)', padding: '10px 14px', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 6 }}
+                            >
+                              <div style={{ fontSize: 13.5, fontWeight: 500, lineHeight: 1.5 }}>{kpi.name}</div>
+                              <div style={{ background: 'rgba(0,0,0,0.04)', padding: '5px 10px', borderRadius: 6, fontSize: 12.5, display: 'inline-block', alignSelf: 'flex-start' }}>
+                                <span className="muted">المستهدف السنوي: </span>
+                                <b>
+                                  {kpi.targetRaw ||
+                                    (kpi.targetNum != null
+                                      ? kpi.targetPct ? `${kpi.targetNum * 100}%` : kpi.targetNum
+                                      : '—')}
+                                </b>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div style={{ background: 'var(--bg-2)', padding: '10px 14px', borderRadius: 8, color: 'var(--text-3)', fontSize: 13, textAlign: 'center' }}>
+                            لا يوجد مؤشر مسجل
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* circular progress indicator */}
-                    <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                      <svg width={68} height={68} viewBox="0 0 68 68">
-                        {/* track */}
-                        <circle cx={34} cy={34} r={R} fill="none" stroke="var(--border)" strokeWidth={5.5} />
-                        {/* progress arc — rotated so it starts from 12 o'clock */}
-                        <circle
-                          cx={34} cy={34} r={R} fill="none"
-                          stroke={statusColor} strokeWidth={5.5}
-                          strokeDasharray={`${dash} ${CIRC}`}
-                          strokeLinecap="round"
-                          transform="rotate(-90 34 34)"
-                          style={{ transition: 'stroke-dasharray 0.9s cubic-bezier(.4,0,.2,1)' }}
-                        />
-                        {/* percentage label */}
-                        <text
-                          x={34} y={38}
-                          textAnchor="middle"
-                          style={{ fill: statusColor, fontSize: 13, fontWeight: 700, fontFamily: 'var(--font-sans, inherit)' }}
-                        >
-                          {Math.round(progress)}%
-                        </text>
-                      </svg>
-                      <span style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 600 }}>الإنجاز</span>
-                    </div>
-                  </div>
-
-                  {/* ── KPI section: all indicators ──────────────────────── */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div className="row muted" style={{ gap: 6, fontSize: 12.5, fontWeight: 600 }}>
-                      <Target size={14} />
-                      {pKpis.length > 1
-                        ? `مؤشرات قياس المشروع (${pKpis.length})`
-                        : 'مؤشر قياس المشروع'}
-                    </div>
-
-                    {pKpis.length > 0 ? (
-                      pKpis.map((kpi) => (
-                        <div
-                          key={kpi.id}
-                          style={{ background: 'var(--bg-2)', padding: '10px 14px', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 6 }}
-                        >
-                          <div style={{ fontSize: 13.5, fontWeight: 500, lineHeight: 1.5 }}>{kpi.name}</div>
-                          <div style={{ background: 'rgba(0,0,0,0.04)', padding: '5px 10px', borderRadius: 6, fontSize: 12.5, display: 'inline-block', alignSelf: 'flex-start' }}>
-                            <span className="muted">المستهدف السنوي: </span>
-                            <b>
-                              {kpi.targetRaw ||
-                                (kpi.targetNum != null
-                                  ? kpi.targetPct ? `${kpi.targetNum * 100}%` : kpi.targetNum
-                                  : '—')}
-                            </b>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div style={{ background: 'var(--bg-2)', padding: '10px 14px', borderRadius: 8, color: 'var(--text-3)', fontSize: 13, textAlign: 'center' }}>
-                        لا يوجد مؤشر مسجل
+                    <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, marginInlineStart: 16 }}>
+                      <div style={{ position: 'relative', width: 128, height: 128, display: 'grid', placeItems: 'center' }}>
+                        {/* glow behind */}
+                        <div style={{ position: 'absolute', inset: 6, borderRadius: '50%', background: statusColor, opacity: 0.15, filter: 'blur(12px)' }} />
+                        <svg width={128} height={128} viewBox="0 0 128 128" style={{ position: 'relative', zIndex: 1, filter: `drop-shadow(0 6px 10px ${statusColor}40)` }}>
+                          {/* track */}
+                          <circle cx={64} cy={64} r={R} fill="none" stroke="var(--surface-2)" strokeWidth={9} />
+                          {/* progress arc — rotated so it starts from 12 o'clock */}
+                          <circle
+                            cx={64} cy={64} r={R} fill="none"
+                            stroke={statusColor} strokeWidth={9}
+                            strokeDasharray={`${dash} ${CIRC}`}
+                            strokeLinecap="round"
+                            transform="rotate(-90 64 64)"
+                            style={{ transition: 'stroke-dasharray 0.9s cubic-bezier(.4,0,.2,1)' }}
+                          />
+                          {/* percentage label */}
+                          <text
+                            x={64} y={72}
+                            textAnchor="middle"
+                            style={{ fill: statusColor, fontSize: 24, fontWeight: 800, fontFamily: 'var(--font-sans, inherit)' }}
+                          >
+                            {Math.round(progress)}%
+                          </text>
+                        </svg>
                       </div>
-                    )}
+                      <span style={{ fontSize: 13.5, color: 'var(--text-3)', fontWeight: 600 }}>الإنجاز</span>
+                    </div>
                   </div>
 
                 </div>

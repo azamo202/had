@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../store/AppContext.jsx';
 import { sendNotification } from '../store/AppContext.jsx';
-import { st, fmtPct, can, APPROVAL_STATUS } from '../lib/status.js';
+import { st, fmtPct, can, APPROVAL_STATUS, dispMonth } from '../lib/status.js';
 import { scopeProjects, makeIndex } from '../lib/select.js';
 import { PageHead } from '../components/ui/Bits.jsx';
 import { supabase } from '../lib/supabaseClient.js';
@@ -231,7 +231,7 @@ export default function MonthlyFollowup() {
             userId: su.id,
             type: 'approval_pending',
             title: `طلب مراجعة جديد: ${project.name}`,
-            body: `أرسل ${user.name} تحديث شهر ${month} لمشروع "${project.name}" بانتظار موافقتك.`,
+            body: `أرسل ${user.name} تحديث شهر ${dispMonth(month)} لمشروع "${project.name}" بانتظار موافقتك.`,
             entityId: updateId,
             projectId: project.id,
           })
@@ -292,12 +292,12 @@ export default function MonthlyFollowup() {
       if (updateRow?.created_by) {
         const notifType = decision === 'approved' ? 'update_approved' : 'update_rejected';
         const titleMap = {
-          approved: `تم اعتماد تحديث شهر ${month}: ${project.name}`,
-          needs_modification: `طلب تعديل لتحديث شهر ${month}: ${project.name}`,
+          approved: `تم اعتماد تحديث شهر ${dispMonth(month)}: ${project.name}`,
+          needs_modification: `طلب تعديل لتحديث شهر ${dispMonth(month)}: ${project.name}`,
         };
         const bodyMap = {
-          approved: `قام ${user.name} باعتماد تحديثك لشهر ${month} لمشروع "${project.name}".`,
-          needs_modification: `أرسل ${user.name} ملاحظات لتعديل تحديثك لشهر ${month}${rejectReason ? ': ' + rejectReason : ''}. يرجى معالجة الملاحظات وإعادة الإرسال.`,
+          approved: `قام ${user.name} باعتماد تحديثك لشهر ${dispMonth(month)} لمشروع "${project.name}".`,
+          needs_modification: `أرسل ${user.name} ملاحظات لتعديل تحديثك لشهر ${dispMonth(month)}${rejectReason ? ': ' + rejectReason : ''}. يرجى معالجة الملاحظات وإعادة الإرسال.`,
         };
         await sendNotification({
           userId: updateRow.created_by,
@@ -523,9 +523,6 @@ export default function MonthlyFollowup() {
                     
                     <span className="muted">الإدارة المُنَفِّذة:</span>
                     <span>{project.dept || '—'}</span>
-
-                    <span className="muted">الأرباع السنوية:</span>
-                    <span>{idx.i[project.initiativeId]?.q1 ? 'Q1 ' : ''}{idx.i[project.initiativeId]?.q2 ? 'Q2 ' : ''}{idx.i[project.initiativeId]?.q3 ? 'Q3 ' : ''}{idx.i[project.initiativeId]?.q4 ? 'Q4' : ''}</span>
                   </div>
                 </div>
                 {approval && <span className={`badge ${APPROVAL_STATUS[approval.status]?.cls} lg`}>{APPROVAL_STATUS[approval.status]?.label}</span>}
@@ -606,7 +603,7 @@ export default function MonthlyFollowup() {
                       {statusColor !== 'transparent' && (
                         <div style={{ position: 'absolute', top: -4, insetInlineEnd: -4, width: 10, height: 10, borderRadius: 10, background: statusColor, border: '2px solid #fff' }} />
                       )}
-                      {m}
+                      {dispMonth(m)}
                     </button>
                   );
                 })}
@@ -617,7 +614,7 @@ export default function MonthlyFollowup() {
             <div className="card pad" style={{ padding: 24 }}>
               <div className="card-head" style={{ marginBottom: 20 }}>
                 <h3 className="row" style={{ gap: 8, fontSize: 17 }}><Gauge size={20} style={{ color: 'var(--brand)' }} />
-                  {month === 'h1' ? 'ملخص النصف الأول 2026 (يناير — يونيو)' : `مؤشرات المشروع — شهر ${month}`}
+                  {month === 'h1' ? 'ملخص النصف الأول 2026 (يناير — يونيو)' : `مؤشرات المشروع — شهر ${dispMonth(month)}`}
                 </h3>
               </div>
 

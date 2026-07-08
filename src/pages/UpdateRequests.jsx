@@ -83,14 +83,14 @@ export default function UpdateRequests() {
         const notifType = decision === 'approved' ? 'update_approved' : 'update_rejected';
         const project = idx.p[ap.projectId] || { name: 'مشروع غير معروف' };
         const titleMap = {
-          approved: `تم اعتماد تحديث شهر ${ap.month}: ${project.name}`,
-          rejected: `تم رفض تحديث شهر ${ap.month}: ${project.name}`,
-          needs_modification: `تم طلب تعديل تحديث شهر ${ap.month}: ${project.name}`,
+          approved: `تم اعتماد تحديث شهر ${dispMonth(ap.month)}: ${project.name}`,
+          rejected: `تم رفض تحديث شهر ${dispMonth(ap.month)}: ${project.name}`,
+          needs_modification: `تم طلب تعديل تحديث شهر ${dispMonth(ap.month)}: ${project.name}`,
         };
         const bodyMap = {
-          approved: `قام ${user.name} باعتماد تحديثك لشهر ${ap.month} لمشروع "${project.name}".`,
-          rejected: `قام ${user.name} برفض تحديثك لشهر ${ap.month}${comment ? ': ' + comment : ''}. يرجى معالجة الملاحظات وإعادة الإرسال.`,
-          needs_modification: `طلب ${user.name} تعديل تحديثك لشهر ${ap.month}${comment ? ': ' + comment : ''}. يرجى معالجة الملاحظات وإعادة الإرسال.`,
+          approved: `قام ${user.name} باعتماد تحديثك لشهر ${dispMonth(ap.month)} لمشروع "${project.name}".`,
+          rejected: `قام ${user.name} برفض تحديثك لشهر ${dispMonth(ap.month)}${comment ? ': ' + comment : ''}. يرجى معالجة الملاحظات وإعادة الإرسال.`,
+          needs_modification: `طلب ${user.name} تعديل تحديثك لشهر ${dispMonth(ap.month)}${comment ? ': ' + comment : ''}. يرجى معالجة الملاحظات وإعادة الإرسال.`,
         };
         await sendNotification({
           userId: updateRow.created_by,
@@ -148,7 +148,7 @@ export default function UpdateRequests() {
                 <span className={`badge ${APPROVAL_STATUS[ap.status]?.cls || 'st-attention'}`}>
                   {APPROVAL_STATUS[ap.status]?.label || ap.status}
                 </span>
-                <span className="muted" style={{ fontSize: 12 }}>{ap.month}</span>
+                <span className="muted" style={{ fontSize: 12 }}>{dispMonth(ap.month)}</span>
               </div>
               
               <div className="row" style={{ gap: 12, minWidth: 0, cursor: 'pointer' }} onClick={() => nav('/followup?project=' + ap.projectId)}>
