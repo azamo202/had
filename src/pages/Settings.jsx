@@ -80,13 +80,13 @@ export default function Settings() {
             <div className="card-head"><h3 className="row" style={{ gap: 8 }}><SlidersHorizontal size={17} style={{ color: 'var(--brand)' }} />قواعد احتساب الحالة</h3>
               <span className="card-sub">حدود نسبة التحقق التي تُحدد لون وحالة المؤشر</span></div>
             <div className="grid g-3" style={{ gap: 16 }}>
-              <Field label="مكتمل (≥ %)" hint="عند بلوغ هذه النسبة يُعتبر مكتملاً">
+              <Field label="مكتمل (≥ %)" hint="90%-100% → مكتمل">
                 <input className="inp" type="number" value={r.completed} onChange={(e) => setR({ ...r, completed: +e.target.value })} />
               </Field>
-              <Field label="على المسار (≥ %)">
+              <Field label="قيد التنفيذ (≥ %)" hint="70%-89% → قيد التنفيذ">
                 <input className="inp" type="number" value={r.on_track} onChange={(e) => setR({ ...r, on_track: +e.target.value })} />
               </Field>
-              <Field label="يحتاج انتباه (≥ %)" hint="أقل من ذلك يُعتبر متعثراً">
+              <Field label="متأخر (≥ %)" hint="50%-69% → متأخر | أقل من ذلك → متعثر">
                 <input className="inp" type="number" value={r.attention} onChange={(e) => setR({ ...r, attention: +e.target.value })} />
               </Field>
             </div>

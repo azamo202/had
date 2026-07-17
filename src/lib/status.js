@@ -1,15 +1,16 @@
 // ============ Status, formatting, roles ============
 
 export const STATUS = {
-  completed:   { key: 'completed',   label: 'مكتمل',        color: 'var(--st-completed)' },
-  on_track:    { key: 'on_track',    label: 'على المسار',   color: 'var(--st-ontrack)' },
-  attention:   { key: 'attention',   label: 'يحتاج متابعة', color: 'var(--st-attention)' },
-  delayed:     { key: 'delayed',     label: 'متأخر / حرج',  color: 'var(--st-delayed)' },
-  not_started: { key: 'not_started', label: 'لم يبدأ',      color: 'var(--st-notstarted)' },
+  completed:   { key: 'completed',   label: 'مكتمل',       color: 'var(--st-completed)' },
+  on_track:    { key: 'on_track',    label: 'قيد التنفيذ', color: 'var(--st-ontrack)' },
+  attention:   { key: 'attention',   label: 'متأخر',        color: 'var(--st-attention)' },
+  delayed:     { key: 'delayed',     label: 'متعثر',        color: 'var(--st-delayed)' },
+  not_started: { key: 'not_started', label: 'لم يبدأ',     color: 'var(--st-notstarted)' },
 };
 
 // editable thresholds (Settings > Status Rules)
-export const DEFAULT_RULES = { completed: 100, on_track: 70, attention: 40 };
+// مكتمل 90-100% | قيد التنفيذ 70-89% | متأخر 50-69% | متعثر أقل من 50%
+export const DEFAULT_RULES = { completed: 90, on_track: 70, attention: 50 };
 
 export function statusFromPct(pct, hasData = true, rules = DEFAULT_RULES) {
   if (!hasData || pct === null || pct === undefined) return 'not_started';
@@ -22,9 +23,9 @@ export function statusFromPct(pct, hasData = true, rules = DEFAULT_RULES) {
 export const st = (k) => STATUS[k] || STATUS.not_started;
 
 export const ROLES = {
-  ceo: { label: 'الرئيس التنفيذي', short: 'الرئيس التنفيذي' },
-  strategy_office: { label: 'مدير المنصة', short: 'مدير المنصة' },
-  manager: { label: 'ممثل إدارة / مسؤول تحديث (جهة تنفيذية)', short: 'ممثل إدارة' },
+  strategy_office: { label: 'مدير المنصة', short: 'مدير المنصة', desc: 'كامل الصلاحيات' },
+  ceo: { label: 'الرئيس التنفيذي / رئيس قطاع', short: 'رئيس تنفيذي', desc: 'اطلاع فقط على كامل المنصة' },
+  manager: { label: 'مدير إدارة / رئيس قسم / مدير مكتب', short: 'مدير إدارة', desc: 'إدخال وتحديث بياناته فقط' },
 };
 
 // permission helpers

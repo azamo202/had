@@ -330,3 +330,67 @@ table.tbl { width:100%; border-collapse: collapse; font-size: 13px; }
   .sidebar.mobile-open { transform: none; }
   .sidebar-backdrop.show { display:block; position:fixed; inset:0; background: rgba(0,0,0,.4); z-index: 39; }
 }
+
+/* Strategic Goal Cards — clean white card with a soft colored circle decoration */
+[class*="goal-card-"] {
+  background: var(--bg-elev) !important;
+  border-color: var(--border) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+[class*="goal-card-"]::before {
+  content: '';
+  position: absolute;
+  inset-inline-end: -28px;
+  top: -28px;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  opacity: 0.13;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+
+[class*="goal-card-"]:hover::before {
+  opacity: 0.2;
+}
+
+.goal-card-1 { --theme-base: var(--brand); }
+.goal-card-1::before { background: var(--brand); }
+.goal-card-1 .goal-index { background: color-mix(in srgb, var(--brand) 12%, var(--bg-elev)) !important; color: var(--brand-deep) !important; }
+
+.goal-card-2 { --theme-base: #3b82f6; }
+.goal-card-2::before { background: #3b82f6; }
+.goal-card-2 .goal-index { background: color-mix(in srgb, #3b82f6 12%, var(--bg-elev)) !important; color: #1d4ed8 !important; }
+
+.goal-card-3 { --theme-base: #8b5cf6; }
+.goal-card-3::before { background: #8b5cf6; }
+.goal-card-3 .goal-index { background: color-mix(in srgb, #8b5cf6 12%, var(--bg-elev)) !important; color: #6d28d9 !important; }
+
+.goal-card-4 { --theme-base: #f59e0b; }
+.goal-card-4::before { background: #f59e0b; }
+.goal-card-4 .goal-index { background: color-mix(in srgb, #f59e0b 12%, var(--bg-elev)) !important; color: #b45309 !important; }
+
+.goal-card-5 { --theme-base: #ef4444; }
+.goal-card-5::before { background: #ef4444; }
+.goal-card-5 .goal-index { background: color-mix(in srgb, #ef4444 12%, var(--bg-elev)) !important; color: #b91c1c !important; }
+
+.goal-card-6 { --theme-base: #06b6d4; }
+.goal-card-6::before { background: #06b6d4; }
+.goal-card-6 .goal-index { background: color-mix(in srgb, #06b6d4 12%, var(--bg-elev)) !important; color: #0e7490 !important; }
+
+.goal-card-7 { --theme-base: #ec4899; }
+.goal-card-7::before { background: #ec4899; }
+.goal-card-7 .goal-index { background: color-mix(in srgb, #ec4899 12%, var(--bg-elev)) !important; color: #be185d !important; }
+
+.goal-card-8 { --theme-base: #10b981; }
+.goal-card-8::before { background: #10b981; }
+.goal-card-8 .goal-index { background: color-mix(in srgb, #10b981 12%, var(--bg-elev)) !important; color: #047857 !important; }
+
+.goal-card-hover-effect:hover {
+  border-color: var(--theme-base) !important;
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-sm);
+}
+

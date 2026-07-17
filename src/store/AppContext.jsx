@@ -20,7 +20,7 @@ export async function sendNotification({ userId, type, title, body = '', entityI
 const AppCtx = createContext(null);
 export const useApp = () => useContext(AppCtx);
 
-const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليه', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
 const LS = 'hadiyah_state_v1';
 
@@ -35,26 +35,70 @@ function loadPersisted() {
 function recomputeKpi(k, rules, approvals) {
   const has = k.targetNum != null && k.targetNum > 0;
 
-  // مجموع المنجز الفعلي (يحسب فقط القيم المعتمدة أو المستوردة التي ليس لها طلب تحديث)
+  const isPctKpi = k.targetPct || String(k.targetRaw || '').includes('%') || String(k.name || '').includes('نسبة');
+  const effectiveTarget = (isPctKpi && k.targetNum > 0 && k.targetNum <= 1)
+    ? k.targetNum * 100
+    : k.targetNum;
+
+  // ── نسبة إنجاز النصف الأول (يناير–يونيو) ──────────────────────────
+  // تُستخدم قيمة h1ProjectProgress المستوردة من الإكسل إذا وُجدت،
+  // وإلا تُحسب من قيم الأشهر 1–6
+  let h1Pct = null;
+  if (k.h1ProjectProgress != null) {
+    h1Pct = clampPct(k.h1ProjectProgress);
+  } else if (has) {
+    const h1Monthly = (k.monthly || []).filter(m => m.month >= 1 && m.month <= 6);
+    const lastH1Target = [...h1Monthly].reverse().find(m => m.target != null)?.target ?? null;
+    const lastH1Actual = [...h1Monthly].reverse().find(m => m.actual != null)?.actual ?? null;
+    if (lastH1Target != null && lastH1Target > 0 && lastH1Actual != null) {
+      h1Pct = clampPct((lastH1Actual / lastH1Target) * 100);
+    } else {
+      h1Pct = 0; // لم يُنجز شيء في النصف الأول
+    }
+  }
+
+  // ── نسبة إنجاز النصف الثاني (يوليو–ديسمبر) ───────────────────────
+  let h2Pct = 0;
+  if (has) {
+    const h2Monthly = (k.monthly || []).filter(m => m.month >= 7 && m.month <= 12);
+    const hasH2Target = h2Monthly.some(m => m.target != null && m.target !== '');
+    if (hasH2Target) {
+      // إجمالي المستهدفات في النصف الثاني (مجموع الأشهر الستة)
+      const h2TargetSum = h2Monthly.reduce((s, m) => {
+        return s + (m.target != null && m.target !== '' ? Number(m.target) : 0);
+      }, 0);
+
+      // مجموع المنجز المعتمد أو المستورد في الأشهر 7–12
+      const h2ActualSum = h2Monthly.reduce((s, m) => {
+        if (m.actual == null) return s;
+        const appRecord = approvals?.find(a => a.projectId === k.projectId && a.monthNum === m.month);
+        const isApprovedOrImported = appRecord ? appRecord.status === 'approved' : true;
+        return s + (isApprovedOrImported ? Number(m.actual) : 0);
+      }, 0);
+
+      if (h2TargetSum > 0) {
+        h2Pct = clampPct((h2ActualSum / h2TargetSum) * 100);
+      }
+    }
+  }
+
+  // ── الحساب الكلي: متوسط النصفين ────────────────────────────────────
+  // إنجاز 100% في H1 + 0% في H2 = 50% إجمالاً
+  // إنجاز 100% في H1 + 100% في H2 = 100% إجمالاً
+  const pct = has
+    ? clampPct((h1Pct + h2Pct) / 2)
+    : null;
+
+  // المنجز الإجمالي (للعرض فقط)
   const approvedSum = (k.monthly || []).reduce((s, m) => {
     if (m.actual == null) return s;
     const appRecord = approvals?.find(a => a.projectId === k.projectId && a.monthNum === m.month);
-    // تُحسب القيمة إذا كان التحديث معتمدًا، أو إذا لم يوجد سجل تحديث (يُعتبر مستورداً من الإكسل)
     const isApprovedOrImported = appRecord ? appRecord.status === 'approved' : true;
     return s + (isApprovedOrImported ? Number(m.actual) : 0);
   }, 0);
-
   const achieved = has ? approvedSum : null;
 
-  // إصلاح خطأ الوحدات: إذا كان المؤشر نسبة مئوية والهدف مخزّن كعشري (0–0.999)
-  // بينما المنجز يُدخل كعدد صحيح (0–100)، نضرب الهدف في 100 لتوحيد الوحدات
-  const isPctKpi = k.targetPct || String(k.targetRaw || '').includes('%') || String(k.name || '').includes('نسبة');
-  const effectiveTarget = (isPctKpi && k.targetNum > 0 && k.targetNum <= 1)
-    ? k.targetNum * 100  // تحويل 0.5 → 50 لتتوافق مع مدخلات المستخدم
-    : k.targetNum;
-
-  const pct = has ? clampPct((achieved / effectiveTarget) * 100) : null;
-  return { ...k, achievedNum: achieved, achievement: pct, status: statusFromPct(pct, has, rules) };
+  return { ...k, achievedNum: achieved, achievement: pct, h1Pct, h2Pct, status: statusFromPct(pct, has, rules) };
 }
 
 function rollup(db, rules) {
@@ -524,6 +568,12 @@ export function AppProvider({ children }) {
               evidence: mv ? mv.evidence : ''
             });
           }
+          // Extract H1 project progress stored in month-6 notes
+          const m6 = monthlies.find(x => x.month === 6);
+          const m6Notes = m6?.updates_notes || '';
+          const h1ProgressMatch = m6Notes.match(/h1_project_progress:(\d+)/);
+          const h1ProjectProgress = h1ProgressMatch ? Number(h1ProgressMatch[1]) : null;
+
           return {
             id: ind.id,
             projectId: ind.project_id,
@@ -532,7 +582,8 @@ export function AppProvider({ children }) {
             targetNum: ind.annual_target,
             targetRaw: ind.target_raw,
             targetPct: ind.kpi_target_is_percentage,
-            monthly: monthlyArr
+            monthly: monthlyArr,
+            h1ProjectProgress
           };
         });
 
@@ -561,6 +612,16 @@ export function AppProvider({ children }) {
 
         const mappedApprovals = (monthlyUpdatesData || []).map(upd => {
           const p = mappedProjects.find(x => x.id === upd.project_id);
+          // تحليل بيانات الإرسال المخزنة كـ JSON
+          let parsedNote = {};
+          try {
+            if (upd.notes && upd.notes.trim().startsWith('{')) {
+              parsedNote = JSON.parse(upd.notes);
+            } else {
+              parsedNote = { challenges: upd.notes || '' };
+            }
+          } catch { parsedNote = { challenges: upd.notes || '' }; }
+
           return {
             id: upd.id,
             projectId: upd.project_id,
@@ -571,6 +632,11 @@ export function AppProvider({ children }) {
             status: upd.status || 'pending',
             submittedBy: upd.users?.full_name || 'غير محدد',
             note: upd.notes,
+            challenges: parsedNote.challenges || '',
+            support: parsedNote.support || '',
+            evLink: parsedNote.evLink || '',
+            evType: parsedNote.evType || '',
+            evDesc: parsedNote.evDesc || '',
             comments: (upd.rejection_reason && upd.status !== 'approved') ? [{ by: 'الاستراتيجية', text: upd.rejection_reason, decision: 'rejected' }] : []
           };
         });

@@ -138,14 +138,14 @@ export default function UsersPage() {
   return (
     <div className="page fade-in">
       <PageHead title="إدارة المستخدمين" sub="إدارة حسابات المستخدمين وصلاحياتهم">
-        <button className="btn btn-primary btn-sm" onClick={() => setEdit({ id: null, name: '', email: '', role: 'ceo', dept: null, active: true })}><Plus size={15} /> مستخدم جديد</button>
+        <button className="btn btn-primary btn-sm" onClick={() => setEdit({ id: null, name: '', email: '', role: 'manager', dept: null, active: true })}><Plus size={15} /> مستخدم جديد</button>
       </PageHead>
 
       <div className="stat-grid" style={{ marginBottom: 16 }}>
         <StatCard icon={Users} label="إجمالي المستخدمين" value={(db.users || []).length} />
-        <StatCard icon={Shield} label="مدراء وصلاحيات كاملة" value={byRole.ceo + byRole.strategy_office} color="var(--brand-deep)" bg="color-mix(in srgb,var(--brand-deep) 12%,transparent)" />
-        <StatCard icon={Building2} label="مدراء الإدارات" value={byRole.manager} color="var(--gold)" bg="color-mix(in srgb,var(--gold) 18%,transparent)" />
-        <StatCard icon={Users} label="نشِط" value={(db.users || []).filter((u) => u.active).length} color="var(--st-completed)" bg="color-mix(in srgb,var(--st-completed) 12%,transparent)" />
+        <StatCard icon={Shield} label="مدراء المنصة" value={byRole.strategy_office} color="var(--brand-deep)" bg="color-mix(in srgb,var(--brand-deep) 12%,transparent)" />
+        <StatCard icon={Shield} label="رئيس تنفيذي / رئيس قطاع" value={byRole.ceo} color="var(--gold)" bg="color-mix(in srgb,var(--gold) 18%,transparent)" />
+        <StatCard icon={Building2} label="مدراء الإدارات والأقسام" value={byRole.manager} color="var(--st-completed)" bg="color-mix(in srgb,var(--st-completed) 12%,transparent)" />
       </div>
 
       <div className="card pad" style={{ marginBottom: 14, display: 'grid', gap: 12 }}>
@@ -161,7 +161,7 @@ export default function UsersPage() {
               <tr key={u.id}>
                 <td><span className="row" style={{ gap: 9 }}><Avatar name={u.name} text={u.avatar} /><b style={{ fontSize: 13 }}>{u.name}</b></span></td>
                 <td className="muted" style={{ fontSize: 12.5 }}>{u.email}</td>
-                <td><span className="badge" style={{ background: 'var(--brand-tint)', color: 'var(--brand-deep)' }}><Shield size={12} />{ROLES[u.role]?.label}</span></td>
+                <td><span className="badge" style={{ background: 'var(--brand-tint)', color: 'var(--brand-deep)' }}><Shield size={12} />{ROLES[u.role]?.short || ROLES[u.role]?.label}</span></td>
                 <td className="muted" style={{ fontSize: 12 }}>{u.dept || '—'}</td>
                 <td>
                   <button className={`badge ${u.active ? 'st-completed' : 'st-not_started'}`} onClick={() => toggleActive(u)} style={{ cursor: 'pointer' }} disabled={loading}>
@@ -228,10 +228,15 @@ function EditUser({ db, u, onClose, onSave, loading }) {
             </Field>
           </>
         )}
-        <Field label="الدور">
+        <Field label="الدور والصلاحيات">
           <select className="sel" value={f.role} onChange={(e) => set('role', e.target.value)} disabled={loading}>
             {ROLE_OPTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
+          {f.role && ROLES[f.role]?.desc && (
+            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--brand-deep)', background: 'var(--brand-tint)', padding: '6px 10px', borderRadius: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
+              <Shield size={12} /> {ROLES[f.role].desc}
+            </div>
+          )}
         </Field>
         {needsDept && (
           <Field label="الإدارة">

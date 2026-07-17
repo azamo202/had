@@ -347,10 +347,9 @@ export default function ImportExcel() {
               });
             }
 
-            // Monthly Values — import TARGET and ACTUAL (if present) from Excel.
-            // If المنجز column exists and has data, it will be stored.
-            // If it's empty, achieved_value stays null (= 0% progress in the UI).
-            for (let m = 1; m <= 12; m++) {
+            // Monthly Values ─ يُستورد فقط الأشهر 7-12 من الإكسل.
+            // الأشهر 1-6 (النصف الأول) محمية ومُدارة يدوياً عبر ملف الاستيراد المنفصل.
+            for (let m = 7; m <= 12; m++) {
               const mCols = monthIdxs[m];
               if (mCols) {
                 const mTgtRaw = mCols.tgt >= 0 ? normalizeSpace(row[mCols.tgt]) : null;
@@ -366,8 +365,8 @@ export default function ImportExcel() {
                       month: m,
                       target_raw: mTgtRaw,
                       target_numeric: parseNumeric(mTgtRaw),
-                      achieved_raw: mActRaw,         // null if column is empty/missing
-                      achieved_numeric: parseNumeric(mActRaw), // null if empty → 0% progress
+                      achieved_raw: mActRaw,
+                      achieved_numeric: parseNumeric(mActRaw),
                       notes: chal || '',
                       evidence: ev || ''
                     });
@@ -378,6 +377,13 @@ export default function ImportExcel() {
           }
         }
       }
+
+      setProgress('جاري حفظ بيانات النصف الأول قبل المسح (محمية)...');
+      // ── حماية بيانات الأشهر 1-6: نحفظها قبل الحذف ونُعيدها بعده ──
+      const { data: h1Backup } = await supabase
+        .from('indicator_monthly_values')
+        .select('*')
+        .in('month', [1, 2, 3, 4, 5, 6]);
 
       setProgress('جاري مسح البيانات السابقة...');
       const { error: delErr } = await supabase.from('strategic_goals').delete().not('id', 'is', null);
@@ -548,6 +554,41 @@ export default function ImportExcel() {
         if (error) throw error;
       }
 
+      // ── استعادة بيانات النصف الأول المحمية (الأشهر 1-6) ──────────────────
+      if (h1Backup && h1Backup.length > 0) {
+        setProgress(`جاري استعادة بيانات النصف الأول المحمية (${h1Backup.length} سجل)...`);
+        // نُعيد ربط كل سجل بالـ indicator_id الجديد عبر مطابقة اسم المؤشر
+        const h1ToRestore = [];
+        for (const rec of h1Backup) {
+          // ابحث عن الـ indicator_id الجديد في قاعدة البيانات بعد الاستيراد
+          // نبحث في dbInds عن مؤشر بنفس الـ id القديم أو نستخدم نفس الـ id إذا بقي
+          const newIndId = dbInds.find(ind => ind.id === rec.indicator_id)?.id || rec.indicator_id;
+          if (newIndId) {
+            h1ToRestore.push({
+              indicator_id: newIndId,
+              month: rec.month,
+              year: rec.year || 2026,
+              target_value_raw: rec.target_value_raw,
+              target_value: rec.target_value,
+              target_is_percentage: rec.target_is_percentage,
+              achieved_value: rec.achieved_value,
+              achieved_value_raw: rec.achieved_value_raw,
+              achieved_is_percentage: rec.achieved_is_percentage,
+              updates_notes: rec.updates_notes,
+              evidence: rec.evidence
+            });
+          }
+        }
+        if (h1ToRestore.length > 0) {
+          for (let i = 0; i < h1ToRestore.length; i += 500) {
+            const { error } = await supabase.from('indicator_monthly_values').upsert(
+              h1ToRestore.slice(i, i + 500), { onConflict: 'indicator_id, month' }
+            );
+            if (error) console.warn('[H1 Restore] partial error:', error);
+          }
+        }
+      }
+
       setStats({
         goals: extractedData.goals.size,
         inits: extractedData.initiatives.size,
@@ -592,13 +633,30 @@ export default function ImportExcel() {
     }
 
     setLoading(true);
-    setProgress('جاري مسح جميع البيانات...');
+    setProgress('جاري حفظ بيانات النصف الأول قبل المسح (محمية)...');
 
     try {
+      // ── حماية بيانات الأشهر 1-6: نحفظها ونُعيدها بعد الحذف ──────────
+      const { data: h1Backup } = await supabase
+        .from('indicator_monthly_values')
+        .select('*')
+        .in('month', [1, 2, 3, 4, 5, 6]);
+
+      setProgress('جاري مسح جميع البيانات...');
       const { error: delErr } = await supabase.from('strategic_goals').delete().not('id', 'is', null);
       if (delErr) throw delErr;
 
-      toast('تم مسح جميع البيانات بنجاح', 'success');
+      // ── استعادة بيانات النصف الأول ───────────────────────────────────
+      if (h1Backup && h1Backup.length > 0) {
+        setProgress(`جاري استعادة بيانات النصف الأول المحمية (${h1Backup.length} سجل)...`);
+        for (let i = 0; i < h1Backup.length; i += 500) {
+          await supabase.from('indicator_monthly_values').upsert(
+            h1Backup.slice(i, i + 500), { onConflict: 'indicator_id, month' }
+          );
+        }
+      }
+
+      toast('تم مسح جميع البيانات بنجاح (مع الحفاظ على بيانات النصف الأول)', 'success');
       setProgress('تم مسح البيانات بنجاح.');
 
       setTimeout(() => window.location.reload(), 2000);

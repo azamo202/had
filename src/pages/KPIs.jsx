@@ -11,7 +11,7 @@ import { PageHead, SearchBox, Pager, Meta, TrendIcon } from '../components/ui/Bi
 import { Progress, StatusPill, Chips, EmptyState, Ring, StatusPill as SP } from '../components/ui/Primitives.jsx';
 import { TrendArea, PALETTE } from '../components/charts/Charts.jsx';
 
-const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليه', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+const MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
 
 const STATUS_OPTS = [
   { value: 'completed', label: 'مكتمل' }, { value: 'on_track', label: 'على المسار' },

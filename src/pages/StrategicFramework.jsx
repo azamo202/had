@@ -71,11 +71,11 @@ export default function StrategicFramework() {
       `}</style>
 
       <div style={{ maxWidth: 1140, margin: '0 auto', fontFamily: 'var(--font-sans)', paddingBottom: 40 }}>
-        
+
         {/* Vision (Roof) */}
-        <div className="strat-roof" style={{ 
-          color: '#fff', 
-          borderRadius: '28px 28px 0 0', 
+        <div className="strat-roof" style={{
+          color: '#fff',
+          borderRadius: '28px 28px 0 0',
           padding: '48px 40px',
           textAlign: 'center',
           boxShadow: '0 10px 30px rgba(0,160,146,0.15)',
@@ -84,15 +84,15 @@ export default function StrategicFramework() {
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontSize: 22, fontWeight: 800, marginBottom: 24, textShadow: '0 2px 4px rgba(0,0,0,0.2)' }}>
             <Eye size={26} opacity={0.9} /> الرؤية
           </div>
-          <br/>
-          <div className="strat-pill" style={{ 
-            background: '#fff', 
-            color: colors.brandDeep, 
-            padding: '20px 48px', 
-            borderRadius: 99, 
-            fontSize: 20, 
-            fontWeight: 800, 
-            display: 'inline-block', 
+          <br />
+          <div className="strat-pill" style={{
+            background: '#fff',
+            color: colors.brandDeep,
+            padding: '20px 48px',
+            borderRadius: 99,
+            fontSize: 20,
+            fontWeight: 800,
+            display: 'inline-block',
             boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
             border: `1px solid rgba(255,255,255,0.8)`,
             position: 'relative',
@@ -103,17 +103,17 @@ export default function StrategicFramework() {
         </div>
 
         {/* Main Body */}
-        <div style={{ 
-          background: '#fff', 
-          padding: '32px', 
-          borderRadius: '0 0 28px 28px', 
+        <div style={{
+          background: '#fff',
+          padding: '32px',
+          borderRadius: '0 0 28px 28px',
           boxShadow: '0 10px 40px rgba(0,0,0,0.05)',
           display: 'grid',
           gap: '20px',
           border: '1px solid #f1f3f5',
           borderTop: 'none'
         }}>
-          
+
           {/* Mission */}
           <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 16 }}>
             <div className="label-gradient" style={{ color: '#fff', borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 700, fontSize: 16 }}>
@@ -161,12 +161,12 @@ export default function StrategicFramework() {
 
           {/* Goals Matrix */}
           <div style={{ display: 'grid', gridTemplateColumns: '48px 140px 1fr', gap: 16 }}>
-            
+
             {/* Mahawer (Perspectives) Vertical Label */}
             <div style={{ gridRow: '1 / span 4', background: '#f8fafc', border: `1px solid #e2e8f0`, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.02)' }}>
-               <div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontWeight: 800, color: colors.grayLabelDeep, fontSize: 16, letterSpacing: 4 }}>
-                 المحاور
-               </div>
+              <div style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontWeight: 800, color: colors.grayLabelDeep, fontSize: 16, letterSpacing: 4 }}>
+                المحاور
+              </div>
             </div>
 
             {/* Row 1: Beneficiaries */}

@@ -29,13 +29,13 @@ export default function StrategicPlan() {
         {path.map((p, idx) => {
           const isLast = idx === path.length - 1;
           const label = p.level === 'goals' ? 'الأهداف الاستراتيجية' : p.item.name;
-          
+
           return (
             <React.Fragment key={idx}>
-              <button 
+              <button
                 onClick={() => navigateBack(idx)}
                 style={{
-                  background: 'none', border: 'none', padding: 0, 
+                  background: 'none', border: 'none', padding: 0,
                   color: isLast ? 'var(--brand-deep)' : 'var(--text-3)',
                   fontWeight: isLast ? 700 : 500,
                   fontSize: 15, cursor: isLast ? 'default' : 'pointer',
@@ -58,7 +58,7 @@ export default function StrategicPlan() {
       </div>
 
       <div className="fade-in" key={current.level + (current.item?.id || 'root')}>
-        
+
         {/* Section Title Indicator */}
         <div className="row" style={{ marginBottom: 20, gap: 10, background: 'var(--bg)', padding: '12px 16px', borderRadius: 10, border: '1px solid var(--border)' }}>
           <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--brand-tint)', display: 'grid', placeItems: 'center' }}>
@@ -81,30 +81,32 @@ export default function StrategicPlan() {
         {/* Level 1: Goals */}
         {current.level === 'goals' && (
           <div style={{ display: 'grid', gap: 16 }}>
-            {db.goals.map((g) => (
-              <button 
-                key={g.id}
-                className="row between card-hover" 
-                style={{ 
-                  width: '100%', padding: '24px', textAlign: 'start', 
-                  background: 'var(--bg)', color: 'var(--text)',
-                  border: '1px solid var(--border)', borderRadius: 14, cursor: 'pointer'
-                }} 
-                onClick={() => navigateTo('objectives', g)}
-              >
-                <div className="row" style={{ gap: 18, minWidth: 0 }}>
-                  <div style={{ 
-                    background: 'var(--brand-tint)', color: 'var(--brand)', 
-                    width: 54, height: 54, borderRadius: 12, display: 'grid', placeItems: 'center', 
-                    fontWeight: 700, fontSize: 22, flexShrink: 0 
-                  }}>
-                    {g.index || g.code?.replace(/\D/g, '') || '-'}
+            {db.goals.map((g) => {
+              const goalIndex = parseInt(g.index || g.sort_order || g.code?.replace(/\D/g, '') || '1', 10);
+              return (
+                <button
+                  key={g.id}
+                  className={`row between card-hover goal-card-hover-effect goal-card-${((goalIndex - 1) % 8) + 1}`}
+                  style={{
+                    width: '100%', padding: '24px', textAlign: 'start',
+                    color: 'var(--text)',
+                    borderRadius: 14, cursor: 'pointer'
+                  }}
+                  onClick={() => navigateTo('objectives', g)}
+                >
+                  <div className="row" style={{ gap: 18, minWidth: 0 }}>
+                    <div className="goal-index" style={{
+                      width: 54, height: 54, borderRadius: 12, display: 'grid', placeItems: 'center',
+                      fontWeight: 700, fontSize: 22, flexShrink: 0
+                    }}>
+                      {g.index || g.code?.replace(/\D/g, '') || '-'}
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: 17 }}>{g.name}</div>
                   </div>
-                  <div style={{ fontWeight: 600, fontSize: 17 }}>{g.name}</div>
-                </div>
-                <ChevronLeft size={24} style={{ color: 'var(--brand)', opacity: 0.5 }} />
-              </button>
-            ))}
+                  <ChevronLeft size={24} style={{ color: 'var(--theme-base, var(--brand))', opacity: 0.8 }} />
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -112,19 +114,19 @@ export default function StrategicPlan() {
         {current.level === 'objectives' && (
           <div style={{ display: 'grid', gap: 12 }}>
             {db.objectives.filter(o => o.goalId === current.item.id).map((o) => (
-              <button 
+              <button
                 key={o.id}
-                className="row between card-hover" 
-                style={{ 
-                  width: '100%', padding: '20px 24px', textAlign: 'start', 
+                className="row between card-hover"
+                style={{
+                  width: '100%', padding: '20px 24px', textAlign: 'start',
                   background: 'var(--bg)', color: 'var(--text)',
                   border: '1px solid var(--border)', borderRadius: 12, cursor: 'pointer'
-                }} 
+                }}
                 onClick={() => navigateTo('initiatives', o)}
               >
                 <div className="row" style={{ gap: 16, minWidth: 0 }}>
-                  <div style={{ 
-                    background: 'var(--bg-2)', color: 'var(--text-2)', 
+                  <div style={{
+                    background: 'var(--bg-2)', color: 'var(--text-2)',
                     padding: '6px 12px', borderRadius: 8, fontWeight: 600, fontSize: 14, border: '1px solid var(--border)'
                   }}>
                     {o.code || '-'}
@@ -146,13 +148,13 @@ export default function StrategicPlan() {
         {current.level === 'initiatives' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
             {db.initiatives.filter(i => i.objectiveId === current.item.id).map((i) => (
-              <button 
+              <button
                 key={i.id}
-                className="row card-hover" 
-                style={{ 
-                  padding: '20px', background: 'var(--bg)', border: '1px solid var(--border)', 
+                className="row card-hover"
+                style={{
+                  padding: '20px', background: 'var(--bg)', border: '1px solid var(--border)',
                   borderRadius: 12, cursor: 'pointer', textAlign: 'start', gap: 16, alignItems: 'flex-start'
-                }} 
+                }}
                 onClick={() => setSelectedInit(i)}
               >
                 <div style={{ width: 44, height: 44, borderRadius: 10, background: 'var(--brand-tint)', color: 'var(--brand-deep)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
@@ -177,8 +179,9 @@ export default function StrategicPlan() {
       </div>
 
       {selectedInit && <InitiativeModal init={selectedInit} onClose={() => setSelectedInit(null)} />}
-      
-      <style dangerouslySetInnerHTML={{__html: `
+
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .hover-brand:hover { color: var(--brand) !important; }
       `}} />
     </div>
@@ -196,7 +199,7 @@ function InitiativeModal({ init, onClose }) {
   return (
     <Modal title="تفاصيل المبادرة الاستراتيجية" onClose={onClose} width={650}>
       <div style={{ display: 'grid', gap: 24, padding: '10px 0' }}>
-        
+
         {/* Header */}
         <div style={{ background: 'var(--brand-tint)', padding: 20, borderRadius: 12, border: '1px solid var(--brand-100)' }}>
           <div className="row" style={{ gap: 10, marginBottom: 8, color: 'var(--brand-deep)' }}>
@@ -265,9 +268,9 @@ function InitiativeModal({ init, onClose }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
             {quarters.map((q) => (
-              <div 
-                key={q.id} 
-                style={{ 
+              <div
+                key={q.id}
+                style={{
                   padding: 12, textAlign: 'center', borderRadius: 8, fontWeight: 600, fontSize: 13,
                   background: q.active ? 'var(--brand)' : 'var(--bg-2)',
                   color: q.active ? '#fff' : 'var(--text-3)',

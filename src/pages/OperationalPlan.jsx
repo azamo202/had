@@ -29,13 +29,13 @@ export default function OperationalPlan() {
           let label = 'الأهداف الاستراتيجية';
           if (p.level === 'initiatives') label = p.item.name;
           if (p.level === 'projects') label = p.item.name;
-          
+
           return (
             <React.Fragment key={idx}>
-              <button 
+              <button
                 onClick={() => navigateBack(idx)}
                 style={{
-                  background: 'none', border: 'none', padding: 0, 
+                  background: 'none', border: 'none', padding: 0,
                   color: isLast ? 'var(--brand-deep)' : 'var(--text-3)',
                   fontWeight: isLast ? 700 : 500,
                   fontSize: 15, cursor: isLast ? 'default' : 'pointer',
@@ -58,7 +58,7 @@ export default function OperationalPlan() {
       </div>
 
       <div className="fade-in" key={current.level + (current.item?.id || 'root')}>
-        
+
         {/* Section Title Indicator */}
         <div className="row" style={{ marginBottom: 20, gap: 10, background: 'var(--bg)', padding: '12px 16px', borderRadius: 10, border: '1px solid var(--border)' }}>
           <div style={{ width: 40, height: 40, borderRadius: 10, background: 'var(--brand-tint)', display: 'grid', placeItems: 'center' }}>
@@ -81,30 +81,32 @@ export default function OperationalPlan() {
         {/* Level 1: Goals */}
         {current.level === 'goals' && (
           <div style={{ display: 'grid', gap: 16 }}>
-            {db.goals.map((g) => (
-              <button 
-                key={g.id}
-                className="row between card-hover" 
-                style={{ 
-                  width: '100%', padding: '24px', textAlign: 'start', 
-                  background: 'var(--bg)', color: 'var(--text)',
-                  border: '1px solid var(--border)', borderRadius: 14, cursor: 'pointer'
-                }} 
-                onClick={() => navigateTo('initiatives', g)}
-              >
-                <div className="row" style={{ gap: 18, minWidth: 0 }}>
-                  <div style={{ 
-                    background: 'var(--brand-tint)', color: 'var(--brand)', 
-                    width: 54, height: 54, borderRadius: 12, display: 'grid', placeItems: 'center', 
-                    fontWeight: 700, fontSize: 22, flexShrink: 0 
-                  }}>
-                    {g.index || g.code?.replace(/\D/g, '') || '-'}
+            {db.goals.map((g) => {
+              const goalIndex = parseInt(g.index || g.sort_order || g.code?.replace(/\D/g, '') || '1', 10);
+              return (
+                <button
+                  key={g.id}
+                  className={`row between card-hover goal-card-hover-effect goal-card-${((goalIndex - 1) % 8) + 1}`}
+                  style={{
+                    width: '100%', padding: '24px', textAlign: 'start',
+                    color: 'var(--text)',
+                    borderRadius: 14, cursor: 'pointer'
+                  }}
+                  onClick={() => navigateTo('initiatives', g)}
+                >
+                  <div className="row" style={{ gap: 18, minWidth: 0 }}>
+                    <div className="goal-index" style={{
+                      width: 54, height: 54, borderRadius: 12, display: 'grid', placeItems: 'center',
+                      fontWeight: 700, fontSize: 22, flexShrink: 0
+                    }}>
+                      {g.index || g.code?.replace(/\D/g, '') || '-'}
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: 17 }}>{g.name}</div>
                   </div>
-                  <div style={{ fontWeight: 600, fontSize: 17 }}>{g.name}</div>
-                </div>
-                <ChevronLeft size={24} style={{ color: 'var(--brand)', opacity: 0.5 }} />
-              </button>
-            ))}
+                  <ChevronLeft size={24} style={{ color: 'var(--theme-base, var(--brand))', opacity: 0.8 }} />
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -112,14 +114,14 @@ export default function OperationalPlan() {
         {current.level === 'initiatives' && (
           <div style={{ display: 'grid', gap: 12 }}>
             {db.initiatives.filter(i => i.goalId === current.item.id).map((i) => (
-              <button 
+              <button
                 key={i.id}
-                className="row between card-hover" 
-                style={{ 
-                  width: '100%', padding: '20px 24px', textAlign: 'start', 
+                className="row between card-hover"
+                style={{
+                  width: '100%', padding: '20px 24px', textAlign: 'start',
                   background: 'var(--bg)', color: 'var(--text)',
                   border: '1px solid var(--border)', borderRadius: 12, cursor: 'pointer'
-                }} 
+                }}
                 onClick={() => navigateTo('projects', i)}
               >
                 <div className="row" style={{ gap: 16, minWidth: 0 }}>
@@ -148,10 +150,10 @@ export default function OperationalPlan() {
 
               // colour matched to status
               const statusColor =
-                p.status === 'completed'   ? '#10b981' :
-                p.status === 'on_track'    ? '#3b82f6' :
-                p.status === 'attention'   ? '#f59e0b' :
-                p.status === 'delayed'     ? '#ef4444' : '#9ca3af';
+                p.status === 'completed' ? '#10b981' :
+                  p.status === 'on_track' ? '#3b82f6' :
+                    p.status === 'attention' ? '#f59e0b' :
+                      p.status === 'delayed' ? '#ef4444' : '#9ca3af';
 
               // SVG circular progress constants
               const R = 54;
@@ -162,10 +164,10 @@ export default function OperationalPlan() {
                 <div key={p.id} className="card pad" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
 
                   <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                    
+
                     {/* Right side: Info + KPIs */}
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                      
+
                       {/* Header row: icon + name/dept/cost */}
                       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
                         {/* folder icon */}
@@ -251,7 +253,30 @@ export default function OperationalPlan() {
                           </text>
                         </svg>
                       </div>
-                      <span style={{ fontSize: 13.5, color: 'var(--text-3)', fontWeight: 600 }}>الإنجاز</span>
+                      <span style={{ fontSize: 13.5, color: 'var(--text-3)', fontWeight: 600 }}>نسبة الإنجاز حتى الآن</span>
+                      {/* H1 / H2 breakdown */}
+                      {pKpis.length > 0 && (() => {
+                        const avgH1 = pKpis.reduce((s, k) => s + (k.h1Pct ?? 0), 0) / pKpis.length;
+                        const avgH2 = pKpis.reduce((s, k) => s + (k.h2Pct ?? 0), 0) / pKpis.length;
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, width: '100%', minWidth: 120 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, fontWeight: 600 }}>
+                              <span style={{ color: 'var(--text-3)' }}>ن. أول</span>
+                              <span style={{ color: 'var(--brand-deep)' }}>{Math.round(avgH1)}%</span>
+                            </div>
+                            <div style={{ height: 5, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${Math.min(avgH1, 100)}%`, background: 'var(--brand)', borderRadius: 4, transition: 'width 0.8s ease' }} />
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, fontWeight: 600, marginTop: 2 }}>
+                              <span style={{ color: 'var(--text-3)' }}>ن. ثاني</span>
+                              <span style={{ color: avgH2 > 0 ? 'var(--brand-deep)' : 'var(--text-4)' }}>{Math.round(avgH2)}%</span>
+                            </div>
+                            <div style={{ height: 5, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${Math.min(avgH2, 100)}%`, background: avgH2 > 0 ? 'var(--st-ontrack, #3b82f6)' : 'var(--border)', borderRadius: 4, transition: 'width 0.8s ease' }} />
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -268,7 +293,8 @@ export default function OperationalPlan() {
 
       </div>
 
-      <style dangerouslySetInnerHTML={{__html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .hover-brand:hover { color: var(--brand) !important; }
       `}} />
     </div>
