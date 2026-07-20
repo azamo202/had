@@ -146,7 +146,18 @@ export default function OperationalPlan() {
           <div style={{ display: 'grid', gap: 16 }}>
             {db.projects.filter(p => p.initiativeId === current.item.id).map((p) => {
               const pKpis = db.kpis.filter(k => k.projectId === p.id);
-              const progress = Math.min(p.progress ?? 0, 100);
+
+              // ── نسبة الإنجاز: تُستخرج مباشرة من AppContext (recomputeKpi) ──
+              // المنطق: المنجز الكلي ÷ المستهدف السنوي
+              // - للمؤشرات التجميعية: H1 actual + مجموع H2 actuals ÷ k.targetNum
+              // - للمؤشرات التراكمية (%): آخر منجز معتمد ÷ k.targetNum
+              const kpiProgresses = pKpis
+                .map(k => k.achievement)
+                .filter(v => v != null);
+              const progress = kpiProgresses.length > 0
+                ? Math.min(100, kpiProgresses.reduce((a, b) => a + b, 0) / kpiProgresses.length)
+                : Math.min(p.progress ?? 0, 100);
+
 
               // colour matched to status
               const statusColor =
@@ -254,29 +265,6 @@ export default function OperationalPlan() {
                         </svg>
                       </div>
                       <span style={{ fontSize: 13.5, color: 'var(--text-3)', fontWeight: 600 }}>نسبة الإنجاز حتى الآن</span>
-                      {/* H1 / H2 breakdown */}
-                      {pKpis.length > 0 && (() => {
-                        const avgH1 = pKpis.reduce((s, k) => s + (k.h1Pct ?? 0), 0) / pKpis.length;
-                        const avgH2 = pKpis.reduce((s, k) => s + (k.h2Pct ?? 0), 0) / pKpis.length;
-                        return (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, width: '100%', minWidth: 120 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, fontWeight: 600 }}>
-                              <span style={{ color: 'var(--text-3)' }}>ن. أول</span>
-                              <span style={{ color: 'var(--brand-deep)' }}>{Math.round(avgH1)}%</span>
-                            </div>
-                            <div style={{ height: 5, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${Math.min(avgH1, 100)}%`, background: 'var(--brand)', borderRadius: 4, transition: 'width 0.8s ease' }} />
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, fontWeight: 600, marginTop: 2 }}>
-                              <span style={{ color: 'var(--text-3)' }}>ن. ثاني</span>
-                              <span style={{ color: avgH2 > 0 ? 'var(--brand-deep)' : 'var(--text-4)' }}>{Math.round(avgH2)}%</span>
-                            </div>
-                            <div style={{ height: 5, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${Math.min(avgH2, 100)}%`, background: avgH2 > 0 ? 'var(--st-ontrack, #3b82f6)' : 'var(--border)', borderRadius: 4, transition: 'width 0.8s ease' }} />
-                            </div>
-                          </div>
-                        );
-                      })()}
                     </div>
                   </div>
 

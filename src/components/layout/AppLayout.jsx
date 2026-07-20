@@ -4,7 +4,7 @@ import Sidebar from './Sidebar.jsx';
 import Topbar from './Topbar.jsx';
 import GlobalSearch from './GlobalSearch.jsx';
 import { useApp } from '../../store/AppContext.jsx';
-import { CheckCircle2, XCircle, AlertTriangle, Info } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, Info, Loader2 } from 'lucide-react';
 
 function Toasts() {
   const { toasts, dispatch } = useApp();
@@ -26,9 +26,22 @@ function Toasts() {
 }
 
 export default function AppLayout() {
-  const { user } = useApp();
+  const { user, loadingDb } = useApp();
   const location = useLocation();
   const [search, setSearch] = useState(false);
+
+  // Show a full-screen loader while the auth session is being resolved
+  if (loadingDb && !user) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+          <Loader2 size={40} className="spin" style={{ color: 'var(--brand)' }} />
+          <span style={{ color: 'var(--text-3)', fontSize: 14 }}>جاري التحقق من الجلسة...</span>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) return <Navigate to="/login" replace />;
   return (
     <div className="app-shell">

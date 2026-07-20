@@ -35,14 +35,45 @@ function loadPersisted() {
 function recomputeKpi(k, rules, approvals) {
   const has = k.targetNum != null && k.targetNum > 0;
 
+  // هل هذا مؤشر نسبة مئوية تراكمية؟ (مثال: نسبة تفعيل الشراكات)
   const isPctKpi = k.targetPct || String(k.targetRaw || '').includes('%') || String(k.name || '').includes('نسبة');
+
+  // المستهدف السنوي الفعلي (إذا كان مخزناً كعشري 0.9 نحوّله إلى 90)
   const effectiveTarget = (isPctKpi && k.targetNum > 0 && k.targetNum <= 1)
     ? k.targetNum * 100
     : k.targetNum;
 
-  // ── نسبة إنجاز النصف الأول (يناير–يونيو) ──────────────────────────
-  // تُستخدم قيمة h1ProjectProgress المستوردة من الإكسل إذا وُجدت،
-  // وإلا تُحسب من قيم الأشهر 1–6
+  // ── دالة مساعدة: هل المنجز معتمد؟ ─────────────────────────────
+  const isApproved = (m) => {
+    const appRecord = approvals?.find(a => a.projectId === k.projectId && a.monthNum === m.month);
+    return appRecord ? appRecord.status === 'approved' : true; // لا يوجد سجل = مستورد من الإكسل
+  };
+
+  // ── حساب المنجز الكلي ────────────────────────────────────────────
+  // للمؤشرات التراكمية (نسبة مئوية): نأخذ آخر قيمة معتمدة فقط
+  // للمؤشرات التجميعية (عدد، مبلغ): نجمع H1 الكلي + أشهر H2 بشكل تراكمي
+  let totalActual = 0;
+
+  if (isPctKpi) {
+    // تراكمي: السبتمبر=70% يعني "وصلنا 70% حتى الآن" وليس إضافة
+    const allMonths = [...(k.monthly || [])].sort((a, b) => a.month - b.month);
+    const lastApproved = [...allMonths].reverse().find(m => m.actual != null && m.actual !== '' && isApproved(m));
+    totalActual = lastApproved ? Number(lastApproved.actual) : 0;
+  } else {
+    // تجميعي: منجز H1 (مخزن في يونيو شهر 6) + مجموع أشهر H2 المعتمدة
+    const h1Entry = (k.monthly || []).find(m => m.month === 6);
+    const h1Actual = (h1Entry && h1Entry.actual != null) ? Number(h1Entry.actual) : 0;
+
+    const h2Actual = (k.monthly || [])
+      .filter(m => m.month >= 7 && m.month <= 12 && m.actual != null && m.actual !== '' && isApproved(m))
+      .reduce((s, m) => s + Number(m.actual), 0);
+
+    totalActual = h1Actual + h2Actual;
+  }
+
+  const pct = has ? clampPct((totalActual / effectiveTarget) * 100) : null;
+
+  // ── لأغراض العرض في صفحة المتابعة (H1 / H2) ────────────────────
   let h1Pct = null;
   if (k.h1ProjectProgress != null) {
     h1Pct = clampPct(k.h1ProjectProgress);
@@ -50,56 +81,16 @@ function recomputeKpi(k, rules, approvals) {
     const h1Monthly = (k.monthly || []).filter(m => m.month >= 1 && m.month <= 6);
     const lastH1Target = [...h1Monthly].reverse().find(m => m.target != null)?.target ?? null;
     const lastH1Actual = [...h1Monthly].reverse().find(m => m.actual != null)?.actual ?? null;
-    if (lastH1Target != null && lastH1Target > 0 && lastH1Actual != null) {
-      h1Pct = clampPct((lastH1Actual / lastH1Target) * 100);
-    } else {
-      h1Pct = 0; // لم يُنجز شيء في النصف الأول
-    }
+    h1Pct = (lastH1Target != null && lastH1Target > 0 && lastH1Actual != null)
+      ? clampPct((lastH1Actual / lastH1Target) * 100)
+      : 0;
   }
 
-  // ── نسبة إنجاز النصف الثاني (يوليو–ديسمبر) ───────────────────────
-  let h2Pct = 0;
-  if (has) {
-    const h2Monthly = (k.monthly || []).filter(m => m.month >= 7 && m.month <= 12);
-    const hasH2Target = h2Monthly.some(m => m.target != null && m.target !== '');
-    if (hasH2Target) {
-      // إجمالي المستهدفات في النصف الثاني (مجموع الأشهر الستة)
-      const h2TargetSum = h2Monthly.reduce((s, m) => {
-        return s + (m.target != null && m.target !== '' ? Number(m.target) : 0);
-      }, 0);
+  const h2Pct = has && pct != null ? clampPct(pct) : 0; // للعرض فقط
 
-      // مجموع المنجز المعتمد أو المستورد في الأشهر 7–12
-      const h2ActualSum = h2Monthly.reduce((s, m) => {
-        if (m.actual == null) return s;
-        const appRecord = approvals?.find(a => a.projectId === k.projectId && a.monthNum === m.month);
-        const isApprovedOrImported = appRecord ? appRecord.status === 'approved' : true;
-        return s + (isApprovedOrImported ? Number(m.actual) : 0);
-      }, 0);
-
-      if (h2TargetSum > 0) {
-        h2Pct = clampPct((h2ActualSum / h2TargetSum) * 100);
-      }
-    }
-  }
-
-  // ── الحساب الكلي: متوسط النصفين ────────────────────────────────────
-  // إنجاز 100% في H1 + 0% في H2 = 50% إجمالاً
-  // إنجاز 100% في H1 + 100% في H2 = 100% إجمالاً
-  const pct = has
-    ? clampPct((h1Pct + h2Pct) / 2)
-    : null;
-
-  // المنجز الإجمالي (للعرض فقط)
-  const approvedSum = (k.monthly || []).reduce((s, m) => {
-    if (m.actual == null) return s;
-    const appRecord = approvals?.find(a => a.projectId === k.projectId && a.monthNum === m.month);
-    const isApprovedOrImported = appRecord ? appRecord.status === 'approved' : true;
-    return s + (isApprovedOrImported ? Number(m.actual) : 0);
-  }, 0);
-  const achieved = has ? approvedSum : null;
-
-  return { ...k, achievedNum: achieved, achievement: pct, h1Pct, h2Pct, status: statusFromPct(pct, has, rules) };
+  return { ...k, achievedNum: totalActual, achievement: pct, h1Pct, h2Pct, status: statusFromPct(pct, has, rules) };
 }
+
 
 function rollup(db, rules) {
   if (!db || !db.goals) return db;
@@ -158,6 +149,7 @@ function reducer(state, a) {
     case 'LOGIN': return { ...state, user: a.user };
     case 'LOGOUT': {
       supabase.auth.signOut();
+      try { localStorage.removeItem(LS); } catch { /* ignore */ }
       return { ...state, user: null };
     }
     case 'THEME': return { ...state, theme: state.theme === 'light' ? 'dark' : 'light' };
@@ -672,8 +664,8 @@ export function AppProvider({ children }) {
           }
         });
       } catch (err) {
-        console.error('Error fetching data from Supabase:', err);
-        toast('حدث خطأ أثناء جلب البيانات من الخادم', 'error');
+        if (import.meta.env.DEV) console.error('Error fetching data from Supabase:', err);
+        toast('حدث خطأ أثناء جلب البيانات من الخادم. يرجى تحديث الصفحة.', 'error');
       } finally {
         setLoadingDb(false);
       }

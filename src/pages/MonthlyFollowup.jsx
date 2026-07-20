@@ -634,10 +634,10 @@ export default function MonthlyFollowup() {
                   let bg = 'var(--bg-2)';
                   let color = 'var(--text-3)';
                   let border = '1px solid var(--border)';
-                  let cursor = 'default';
-                  let opacity = 0.6;
+                  let cursor = 'not-allowed';
+                  let opacity = 0.5;
 
-                  if (active || true) { // always clickable — user can enter data
+                  if (active) {
                     cursor = 'pointer';
                     opacity = 1;
                     if (isSelected) {
@@ -653,7 +653,8 @@ export default function MonthlyFollowup() {
                   return (
                     <button
                       key={m}
-                      onClick={() => setMonth(m)}
+                      onClick={() => active && setMonth(m)}
+                      disabled={!active}
                       style={{
                         padding: '10px 16px', borderRadius: 8, fontWeight: 600, fontSize: 14,
                         background: bg, color: color, border: border, cursor: cursor, opacity: opacity,
@@ -795,8 +796,10 @@ export default function MonthlyFollowup() {
                 ))}
             </div>
 
-            {/* 4. Challenges and Support */}
-            <div className="card pad" style={{ padding: 24 }}>
+            {month !== 'h1' && approval?.status !== 'approved' && (
+              <>
+                {/* 4. Challenges and Support */}
+                <div className="card pad" style={{ padding: 24 }}>
               <div className="card-head" style={{ marginBottom: 20 }}>
                 <h3 className="row" style={{ gap: 8, fontSize: 17 }}><Info size={20} style={{ color: 'var(--brand)' }} />التحديات والدعم المطلوب</h3>
               </div>
@@ -964,6 +967,8 @@ export default function MonthlyFollowup() {
                   </div>
                 )}
               </div>
+            )}
+              </>
             )}
 
           </div>

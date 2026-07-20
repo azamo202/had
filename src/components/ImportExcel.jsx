@@ -698,27 +698,6 @@ export default function ImportExcel() {
           {loading ? <><Loader2 size={16} className="spin" /> {progress}</> : 'اختر ملف الإكسل وارفع'}
         </label>
 
-        <button
-          onClick={handleDeleteAllData}
-          disabled={loading}
-          style={{
-            cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.7 : 1,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            background: '#dc2626',
-            color: 'white',
-            border: 'none',
-            padding: '8px 16px',
-            borderRadius: '6px',
-            fontSize: '14px',
-            fontWeight: 500
-          }}
-        >
-          <Trash2 size={16} />
-          مسح جميع البيانات
-        </button>
 
         {loading && <span className="muted" style={{ fontSize: 13 }}>{progress}</span>}
       </div>
