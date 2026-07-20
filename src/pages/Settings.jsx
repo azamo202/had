@@ -14,28 +14,11 @@ export default function Settings() {
   const { rules, theme, dispatch, toast, user, db } = useApp();
   const admin = can.admin(user?.role);
   const [r, setR] = useState(rules);
-  const [types, setTypes] = useState(db.evidenceTypes);
-  const [newType, setNewType] = useState('');
   const [reset, setReset] = useState(false);
 
   const saveRules = () => {
     dispatch({ type: 'RULES', rules: r });
     toast('تم حفظ قواعد الحالة وإعادة احتساب المؤشرات');
-  };
-  const addType = () => {
-    if (!newType.trim()) return;
-    const next = [...types.filter((t) => t !== 'أخرى'), newType.trim(), 'أخرى'];
-    setTypes(next);
-    dispatch({ type: 'SET_EVTYPES', list: next });
-    setNewType('');
-    toast('تمت إضافة نوع الشاهد');
-  };
-  const removeType = (t) => {
-    if (t === 'أخرى') return;
-    const next = types.filter((x) => x !== t);
-    setTypes(next);
-    dispatch({ type: 'SET_EVTYPES', list: next });
-    toast('تم حذف النوع');
   };
   
   const handleResetData = async () => {
@@ -101,21 +84,6 @@ export default function Settings() {
             </div>
           </div>
 
-          {/* Evidence types */}
-          <div className="card pad" style={{ marginBottom: 18 }}>
-            <div className="card-head"><h3 className="row" style={{ gap: 8 }}><FileCheck2 size={17} style={{ color: 'var(--brand)' }} />أنواع الشواهد</h3></div>
-            <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-              {types.map((t) => (
-                <span key={t} className="row" style={{ gap: 6, padding: '6px 12px', borderRadius: 99, background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: 12.5 }}>
-                  {t}{t !== 'أخرى' && <button onClick={() => removeType(t)} style={{ color: 'var(--text-3)', display: 'grid' }}><X size={13} /></button>}
-                </span>
-              ))}
-            </div>
-            <div className="row" style={{ gap: 10, maxWidth: 420 }}>
-              <input className="inp" value={newType} onChange={(e) => setNewType(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addType()} placeholder="أضف نوع شاهد جديد" />
-              <button className="btn btn-soft btn-sm" onClick={addType}><Plus size={15} /> إضافة</button>
-            </div>
-          </div>
 
 
         </>
